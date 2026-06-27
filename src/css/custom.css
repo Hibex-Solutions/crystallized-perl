@@ -53,11 +53,20 @@
   --color-accent-primary: #f59e0b;
   --color-accent-secondary: #d1d5db;
 
-  /* Fundo Slate Deep (ADR-003: --color-bg dark) */
-  --ifm-background-color: #0f172a;
-  --ifm-background-surface-color: #1e293b;
   --ifm-navbar-background-color: #0f172a;
   --ifm-footer-background-color: #0a1120;
+}
+
+/*
+ * Fundo Slate Deep (ADR-003) — usa html[data-theme='dark'] para igualar a
+ * especificidade do Infima e ganhar a cascata por ordem de carregamento.
+ * Sem isso, o Infima sobrescreve --ifm-background-color com o padrão #1b1b1d.
+ * A regra background-color direta garante o fundo mesmo se a variável não resolver.
+ */
+html[data-theme='dark'] {
+  --ifm-background-color: #0f172a;
+  --ifm-background-surface-color: #1e293b;
+  background-color: #0f172a;
 }
 
 /* ─── Syntax highlight — Perl code blocks ───────────────────────────────── */

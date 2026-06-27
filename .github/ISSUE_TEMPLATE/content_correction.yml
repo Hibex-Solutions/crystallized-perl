@@ -10,7 +10,7 @@ body:
         versões desatualizadas de ferramentas, código de exemplo com bugs,
         ou imprecisões técnicas.
 
-        Para problemas técnicos com o site ou repositório, use o template **Bug Report**.
+        Para problemas técnicos com o site ou repositório, use o template **Relatório de Bug**.
 
   - type: textarea
     id: location

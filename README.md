@@ -20,7 +20,7 @@ Stack completo e opinativo para serviços de internet modernos em Perl.
 
 ---
 
-## What This Stack Covers
+## O que este stack cobre
 
 - Aplicações web com HTML server-rendered e SPAs com backend Perl
 - APIs HTTP: REST, GraphQL e WebSocket
@@ -32,7 +32,7 @@ Stack completo e opinativo para serviços de internet modernos em Perl.
 - Estratégia de testes: unitários, integração e end-to-end
 - Ferramental de desenvolvimento e ambiente local com Docker Compose
 
-## What This Stack Does NOT Cover
+## O que este stack NÃO cobre
 
 - Sistemas operacionais, módulos de kernel ou drivers de dispositivo
 - Engines de jogos ou gráficos em tempo real
@@ -41,7 +41,7 @@ Stack completo e opinativo para serviços de internet modernos em Perl.
 - ETL batch ou data warehousing
 - Aplicações desktop ou GUI
 
-## Foundations
+## Fundamentos
 
 Cada escolha tecnológica deste stack rastreia ao menos uma fonte autoritativa
 externa, documentada em [`docs/references/`](docs/references/).
@@ -58,7 +58,7 @@ Nenhuma decisão é justificada por "senso comum" — cada uma tem uma ADR.
 
 Ver [`docs/references/`](docs/references/) para as 28 fontes completas.
 
-## Technology Stack
+## Stack tecnológico
 
 | Camada | Tecnologia | ADR |
 |--------|-----------|-----|
@@ -78,7 +78,7 @@ Decisões de stack são registradas como ADRs em [`docs/adrs/`](docs/adrs/).
 Cada entrada "A definir" será substituída por um link para a ADR correspondente
 quando a decisão for tomada e documentada.
 
-## Documentation
+## Documentação
 
 O site completo da documentação está em:
 
@@ -93,19 +93,19 @@ Estrutura da documentação neste repositório:
 | `docs/guides/` | Tutoriais passo a passo (em desenvolvimento) |
 | `docs/stack/` | Referência por camada tecnológica (em desenvolvimento) |
 
-## Contributing
+## Como contribuir
 
 Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um pull request.
 
 Em especial:
-- Erros de conteúdo → use o template **Content Correction**
+- Erros de conteúdo → use o template **Correção de Conteúdo**
 - Novos guias → abra uma issue antes de escrever
 - Nova ADR → leia [ADR-000](docs/adrs/ADR-000-padrao-de-adrs.md) primeiro
 - Contestar ADR existente → abra uma issue com evidência e proposta de substituição
 
 Ao contribuir, você concorda em seguir nosso [Código de Conduta](CODE_OF_CONDUCT.md).
 
-## License
+## Licença
 
 MIT © 2026 [Hibex Solutions](https://github.com/Hibex-Solutions)
 

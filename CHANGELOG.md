@@ -6,9 +6,9 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 A versão segue [CalVer](https://calver.org) no formato `YYYY.MM.MINOR`
 (exemplo: `2026.06.0`).
 
-## [Unreleased]
+## [Não publicado]
 
-### Added
+### Adicionado
 
 - ADR-000: Padrão de registro de decisões arquiteturais (ADRs)
 - ADR-001: Nome oficial do projeto — Crystallized Perl
@@ -22,4 +22,4 @@ A versão segue [CalVer](https://calver.org) no formato `YYYY.MM.MINOR`
 - Templates de issues e pull request para GitHub
 - Workflows de CI (build da documentação) e deploy (GitHub Pages)
 
-[Unreleased]: https://github.com/Hibex-Solutions/crystallized-perl/commits/main
+[Não publicado]: https://github.com/Hibex-Solutions/crystallized-perl/commits/main

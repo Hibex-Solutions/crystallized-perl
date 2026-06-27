@@ -49,6 +49,9 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       image: 'img/og-image.png',
+      metadata: [
+        { name: 'google-site-verification', content: 'OtRavKmbvZ9ieFf86nGLKJRkS6OxgDLaEP0Uhyp6m40' },
+      ],
       colorMode: {
         defaultMode: 'dark',
         respectPrefersColorScheme: true,

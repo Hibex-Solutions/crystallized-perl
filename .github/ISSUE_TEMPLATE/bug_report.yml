@@ -8,7 +8,7 @@ body:
         Use este template para problemas técnicos: links quebrados no site,
         erros de build, problemas com CI/CD ou comportamento inesperado do
         repositório. Para erros no **conteúdo** da documentação, use o template
-        **Content Correction**.
+        **Correção de Conteúdo**.
 
   - type: textarea
     id: description
