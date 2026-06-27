@@ -1,4 +1,4 @@
-# CLAUDE.md — Modern Perl Cloud-Native Stack
+# CLAUDE.md — Crystallized Perl
 
 This file is the authoritative guide for Claude sessions working on this repository.
 Read it in full before touching any file. It defines scope, constraints, structure,
@@ -16,11 +16,11 @@ The project does **not** ship runnable Perl code as its primary artifact. It shi
 **decisions, guides, and references** that tell a developer exactly how to build
 production-grade internet services in Perl in the current era.
 
-### Elevator pitch (must appear verbatim in README)
+### Elevator pitch (deve aparecer verbatim no README)
 
-> A complete, opinionated stack for building modern internet services in Perl —
-> web applications, HTTP APIs, and background workers — grounded in real-world
-> references and documented architectural decisions.
+> Um stack completo e opinativo para construir serviços de internet modernos em Perl —
+> aplicações web, APIs HTTP e workers em background — fundamentado em referências reais
+> e decisões arquiteturais documentadas.
 
 ---
 
@@ -85,7 +85,7 @@ Build this structure incrementally. Do not create placeholder files.
 Only create a file when its content is ready to write.
 
 ```
-modern-perl-cloud-native-stack/
+crystallized-perl/
 │
 ├── CLAUDE.md                   ← this file
 ├── README.md                   ← project landing page (see requirements below)
@@ -110,7 +110,7 @@ modern-perl-cloud-native-stack/
 │   ├── getting-started/
 │   ├── stack/                   ← per-technology reference pages
 │   ├── guides/                  ← step-by-step tutorials
-│   ├── adr/                     ← Architectural Decision Records
+│   ├── adrs/                    ← Architectural Decision Records
 │   └── references/              ← annotated bibliography of external sources
 │
 ├── assets/
@@ -127,26 +127,21 @@ modern-perl-cloud-native-stack/
 
 ## Documentation Site
 
-**Decision: to be confirmed by the user before creating any site scaffolding.**
+**Decisão: Docusaurus** (escolhido pelo usuário).
 
-Present these options and ask the user to choose:
+O scaffolding ainda não foi executado. Quando for iniciado:
+- Gerar a configuração na raiz do repositório
+- A saída do build vai para `build/` (padrão Docusaurus) e deve estar no `.gitignore`
+- Deploy via GitHub Actions para branch `gh-pages`
+- Não commitar arquivos gerados na branch `main`
 
-| Option | Technology | Notes |
-|--------|------------|-------|
-| A | **Starlight** (Astro) | Most modern, excellent DX, native i18n, GitHub Pages friendly |
-| B | **MkDocs + Material** | Python-based, mature, widely used for technical docs |
-| C | **Docusaurus** | React-based, strong search, Facebook-backed |
-
-Once chosen, scaffold the site generator config under the repository root.
-The generated output always goes to `site/` and must be in `.gitignore`.
-GitHub Pages deployment must use a dedicated `gh-pages` branch or the
-`docs/` output option, never commit built files to `main`.
-
-**Before scaffolding the site, confirm:**
-- [ ] Site generator choice
-- [ ] Primary language of content (default: English)
-- [ ] Custom domain or `username.github.io/repo` subdomain
-- [ ] Search provider (Algolia DocSearch vs. built-in)
+| Atributo | Decisão |
+|----------|---------|
+| Gerador | Docusaurus |
+| Idioma do conteúdo | Português (pt-BR) |
+| URL do site | `hibex-solutions.github.io/crystallized-perl` |
+| Domínio customizado | Não (por ora) |
+| Search | Built-in do Docusaurus (Algolia pode ser adicionado depois) |
 
 ---
 
@@ -154,60 +149,20 @@ GitHub Pages deployment must use a dedicated `gh-pages` branch or the
 
 ### Architectural Decision Records (ADRs)
 
-Every significant technology choice produces one ADR in `docs/adr/`.
-File naming: `NNN-short-title.md` (e.g., `001-perl-version.md`).
+Toda decisão arquitetural significativa produz uma ADR em `docs/adrs/`.
+O padrão completo — formato, seções, nomenclatura de arquivos, valores de status e a
+relação com os arquivos de referência — está definido em
+`docs/adrs/ADR-000-padrao-de-adrs.md`. Leia ADR-000 antes de criar qualquer ADR.
 
-ADR template:
+### Arquivos de Referência
 
-```markdown
-# ADR-NNN: Title
+Toda ADR deve citar ao menos uma fonte em `docs/references/`.
+O padrão completo — template, campos de metadados e a relação bidirecional com as ADRs
+— está definido em `docs/adrs/ADR-000-padrao-de-adrs.md`.
 
-**Status**: Accepted | Superseded by ADR-XXX | Deprecated  
-**Date**: YYYY-MM-DD
-
-## Context
-Why does this decision need to be made?
-
-## Decision
-What we decided.
-
-## Rationale
-Why this option over the alternatives. Must cite at least one reference from `docs/references/`.
-
-## Alternatives Considered
-| Alternative | Reason rejected |
-|-------------|----------------|
-| ... | ... |
-
-## Consequences
-Positive and negative outcomes of this decision.
-```
-
-### References Page
-
-`docs/references/` holds an annotated bibliography.
-Each source gets its own file: `docs/references/source-slug.md`.
-
-Reference template:
-
-```markdown
-# [Source Title](URL)
-
-**Type**: Book | Official Documentation | Blog Post | RFC | Conference Talk  
-**Author(s)**: Name  
-**Published**: YYYY or YYYY-MM-DD  
-**Accessed**: YYYY-MM-DD
-
-## Why It Matters
-One paragraph explaining what this source contributes to the stack definition.
-
-## Used In
-- ADR-NNN: Title
-- Guide: guide-title
-```
-
-**When the user provides source URLs**, create a reference file for each one
-immediately and cross-link it from every ADR and guide that draws on it.
+**Quando o usuário fornecer URLs de fontes externas**, crie imediatamente o arquivo de
+referência correspondente em `docs/references/` e atualize a seção `## Referenciada em`
+de cada ADR ou guia que se apoia nessa fonte.
 
 ### Guides
 
@@ -295,32 +250,35 @@ evaluating whether to use this stack. Avoid words like "amazing", "powerful",
 
 ## Visual Identity
 
-The project needs original imagery. Do not use stock photos.
-All images must be created as SVG when possible; PNG only for raster-required contexts.
+**Decisões tomadas** — ver ADR-002 (mascote) e ADR-003 (paleta e tipografia).
+Concept art de referência em `docs/adrs/references/`.
+
+Não use stock photos. SVG para todos os assets possíveis; PNG apenas onde raster é obrigatório.
+
+### Mascote
+**Raptor Cristalizado** (Crystal Raptor) — velociraptor low-poly com facetas geométricas
+e trechos de código Perl. Ver ADR-002 para a metáfora conceitual completa.
+Concept art: `docs/adrs/references/raptor-cristal-draft.png`.
+
+### Paleta de cores
+Definida em ADR-003. Sistema dual (light/dark) com tokens CSS nomeados.
+Guia visual: `docs/adrs/references/raptor-cristal-palette-draft.png`.
 
 ### banner.svg
-- Dimensions: 1280×320 px viewBox
-- Must visually communicate: "Perl + cloud-native + modern web services"
-- Incorporate: the Perl camel or onion motif (check licensing), cloud/network elements,
-  and a clean typographic treatment of the project name
-- Color palette: to be defined by user; default suggestion is deep navy + amber accent
-- Must work on both light and dark GitHub backgrounds
+- Dimensões: 1280×320 px viewBox
+- Deve comunicar: "Crystallized Perl — Raptor Cristalizado + Perl moderno"
+- Tipografia: Inter (títulos) + JetBrains Mono (código)
+- Funcionar em fundo claro e escuro do GitHub
 
 ### logo.svg
-- Square format, 512×512 px viewBox
-- Simplified version of banner concept, works at 32px and 256px
-- No text (text does not scale)
+- Formato quadrado, 512×512 px viewBox
+- Versão simplificada do mascote, funciona de 32px a 256px
+- Sem texto (texto não escala)
 
 ### og-image.png
 - 1200×630 px, RGB
-- Banner composition adapted to landscape social preview format
-- Include project name and tagline as text
-
-**Before creating images**: confirm the color palette and any brand constraints
-with the user. Ask whether they have a preferred visual direction or reference images.
-
-Note: Perl's camel is trademarked by O'Reilly. The Perl onion/raptor and the
-`use Perl;` logo are community assets. Confirm which symbol to use with the user.
+- Composição do banner adaptada para social preview
+- Incluir nome do projeto e tagline
 
 ---
 
@@ -338,10 +296,10 @@ When building ADRs, the user will provide the rationale and reference links.
 | Job queue | TBD | User will decide with references |
 | HTTP client | TBD | User will decide with references |
 | Testing | TBD | User will decide with references |
-| Containerization | Docker | Near-certain; confirm |
-| Orchestration | TBD | Kubernetes vs. simpler alternatives |
+| Containerization | Docker | Princípio decidido — cloud-native first |
+| Orchestration | TBD | Kubernetes vs. alternativas mais simples — ADR pendente |
 | CI/CD | GitHub Actions | Matches hosting platform |
-| Docs site | TBD | See Documentation Site section |
+| Docs site | Docusaurus | Decidido — scaffolding pendente |
 
 When the user provides their chosen tools and reference URLs, write one ADR per
 decision and one reference file per source, then update this table with links.
@@ -353,7 +311,7 @@ decision and one reference file per source, then update this table with links.
 Follow this sequence when resuming work on this project:
 
 1. Re-read this file in full.
-2. Check `docs/adr/` to understand what has already been decided.
+2. Check `docs/adrs/` to understand what has already been decided.
 3. Check `docs/references/` to understand what sources are in play.
 4. Ask the user what they want to work on before creating files.
 5. If the user provides new reference URLs, create reference files first,
@@ -379,16 +337,24 @@ Follow this sequence when resuming work on this project:
 
 ---
 
-## Open Questions (resolve before building)
+## Decisões Iniciais Resolvidas
 
-These must be answered by the user before the corresponding files are created:
+Todas as questões de fundação estão respondidas. As decisões estão registradas nas ADRs:
 
-- [ ] **GitHub username/org**: What will the repository URL be?
-- [ ] **Copyright holder**: Name for the LICENSE file
-- [ ] **CoC enforcement email**: For CODE_OF_CONDUCT.md
-- [ ] **Custom domain**: Or use `username.github.io/modern-perl-cloud-native-stack`?
-- [ ] **Documentation site generator**: Starlight, MkDocs Material, or Docusaurus?
-- [ ] **Primary content language**: English (default) or bilingual?
-- [ ] **Perl symbol for branding**: Camel (O'Reilly trademark), onion, raptor, or custom?
-- [ ] **Color palette**: For visual identity
-- [ ] **Reference URLs**: User will provide these; they unlock ADR and guide creation
+| Questão | Decisão | ADR |
+|---------|---------|-----|
+| Nome do projeto | Crystallized Perl (`crystallized-perl`) | ADR-001 |
+| Organização GitHub | `Hibex-Solutions` | ADR-001 |
+| URL do site | `hibex-solutions.github.io/crystallized-perl` | ADR-001 |
+| Copyright holder | Hibex Solutions | — |
+| CoC enforcement email | `opensource@hibex.co` | — |
+| Gerador de site | Docusaurus | — |
+| Idioma do conteúdo | Português (pt-BR) | — |
+| Mascote | Raptor Cristalizado (low-poly) | ADR-002 |
+| Paleta de cores | Sistema dual light/dark cristalino | ADR-003 |
+| Tipografia | Inter + JetBrains Mono | ADR-003 |
+| Padrão de ADRs | Definido em ADR-000 | ADR-000 |
+| Referências externas | 28 fontes em `docs/references/` | — |
+
+**Próximos passos**: scaffolding do Docusaurus, depois ADRs de stack (framework web,
+banco de dados, ORM, message broker, testes, orquestração).
