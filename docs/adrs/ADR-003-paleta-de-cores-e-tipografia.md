@@ -102,3 +102,104 @@ Referências externas:
 - **Negativo**: Mosaicos distintos por modo requerem atenção na implementação do tema
 - **Ação necessária**: Verificar contraste WCAG 2.1 AA de todos os pares texto/fundo
   antes de finalizar o site (`#0F172A` sobre `#FFFFFF` e `#E2E8F0` sobre `#0F172A`)
+
+---
+
+## Imagem de Referência — Prompt de Geração
+
+O prompt abaixo descreve um painel de documentação visual da paleta para geração via
+Google Imagen 2. **Não inclui o mascote** — apenas os tokens de cor e as amostras
+tipográficas, em contraste com o rascunho misto em
+`references/raptor-cristal-palette-draft.png`.
+
+A imagem gerada está salva em `references/` e exibida abaixo do prompt.
+
+---
+
+### Guia Visual da Paleta
+
+**Arquivo**: `docs/adrs/references/palette-guide.png`
+
+```text
+A professional color system documentation panel titled "Crystallized Perl — Sistema de
+Cores". Pure design-system infographic — no illustrations, no mascot, no animals, no
+decorative graphics of any kind.
+
+Layout: Landscape rectangle divided into two equal vertical halves by a thin vertical
+divider in #2A2F3A. No outer border.
+
+LEFT HALF — "MODO CLARO (Light Mode)":
+Solid white (#FFFFFF) background filling the entire left half. Section title "MODO CLARO
+(Light Mode)" in Inter Bold, color #0F172A, all-caps, at the top.
+
+Three labeled subsections, each preceded by a small all-caps label in Inter SemiBold:
+
+  ESTRUTURA — three color swatches in a horizontal row, each a rounded rectangle
+  (approximately 80x80 px) filled with its color, labeled below with token name in
+  JetBrains Mono small, hex code in Inter Bold, semantic name in Inter Regular small:
+    Swatch #FFFFFF (white fill with thin #E2E8F0 stroke border to be visible)
+      "--color-bg / #FFFFFF / Fundo Principal"
+    Swatch #0F172A (dark fill, light-colored label text)
+      "--color-text / #0F172A / Texto Base — Slate Deep"
+    Swatch #2A2F3A (dark fill, light-colored label text)
+      "--color-code-neutral / #2A2F3A / Sintaxe de Código"
+
+  MOSAICO GEOMÉTRICO — three swatches:
+    Swatch #007399 → "--color-mosaic-blue / #007399 / Camel Blue histórico"
+    Swatch #F97316 → "--color-mosaic-orange / #F97316 / Energia do Raptor"
+    Swatch #8B5CF6 → "--color-mosaic-purple / #8B5CF6 / Tecnologia Madura"
+
+  ACENTOS DE INTERFACE — two swatches:
+    Swatch #06B6D4 → "--color-accent-primary / #06B6D4 / Ciano Tech"
+    Swatch #F43F5E → "--color-accent-secondary / #F43F5E / Coral Alert"
+
+RIGHT HALF — "MODO ESCURO (Dark Mode)":
+Solid deep slate (#0F172A) background filling the entire right half. Section title
+"MODO ESCURO (Dark Mode)" in Inter Bold, color #E2E8F0, all-caps, at the top.
+Label and description text in #E2E8F0 (light) throughout this half.
+Same three-section structure as the left half:
+
+  ESTRUTURA:
+    Swatch #0F172A (with thin #2A2F3A stroke to be visible on dark bg)
+      "--color-bg / #0F172A / Fundo Principal — Slate Deep"
+    Swatch #E2E8F0 → "--color-text / #E2E8F0 / Texto Base"
+    Swatch #2A2F3A → "--color-code-neutral / #2A2F3A / Sintaxe de Código"
+
+  MOSAICO GEOMÉTRICO:
+    Swatch #10B981 → "--color-mosaic-green / #10B981 / Syntax Success"
+    Swatch #F43F5E → "--color-mosaic-red / #F43F5E / Modern Alert"
+    Swatch #F59E0B → "--color-mosaic-amber / #F59E0B / Modern Amber"
+
+  ACENTOS DE INTERFACE:
+    Swatch #F59E0B → "--color-accent-primary / #F59E0B / Âmbar Moderno"
+    Swatch #D1D5DB → "--color-accent-secondary / #D1D5DB / Slate Muted"
+
+BOTTOM STRIP (full width, spanning both halves):
+Solid #2A2F3A background. Two typography specimens side by side with a thin divider:
+
+  Left specimen:
+    Label "INTER" in Inter Bold 18px, color #E2E8F0.
+    Below: "Um stack completo e opinativo para Perl moderno." in Inter Regular 14px,
+    color #D1D5DB.
+
+  Right specimen:
+    Label "JETBRAINS MONO" in JetBrains Mono Bold 18px, color #E2E8F0.
+    Below: "use strict; use warnings; my $self = shift;" in JetBrains Mono Regular
+    14px, color #10B981 (green syntax highlight effect).
+
+Overall aesthetic: Clean flat design, no drop shadows, consistent internal padding
+throughout, thin #2A2F3A divider lines between subsections within each half,
+professional corporate design system documentation quality. All text is crisp and
+anti-aliased.
+
+Technical: 1600x900 px landscape 16:9 aspect ratio. Left half is genuinely solid
+white (#FFFFFF). Right half is genuinely solid dark (#0F172A). Crisp rendering at
+100% and 200% zoom.
+
+Negative: raptor, velociraptor, dinosaur, any animal or mascot, character
+illustration, watercolor, photographic textures, rough or grungy edges, dark
+background on the left half section, vignette, gradient background fills, any
+decorative art elements, blurry text or swatches.
+```
+
+![Guia Visual da Paleta de Cores — Modo Claro e Escuro](references/palette-guide.png)
