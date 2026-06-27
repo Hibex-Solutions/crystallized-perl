@@ -1,0 +1,8 @@
+{
+  "label": "Referências",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Biblioteca anotada de fontes externas que fundamentam as decisões arquiteturais do projeto — livros, documentações oficiais, RFCs e referências da comunidade."
+  }
+}

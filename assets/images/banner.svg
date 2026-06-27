@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1280" height="320" viewBox="0 0 1280 320">
+
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap');
+    </style>
+
+    <!-- Cyan radial glow behind wordmark -->
+    <!-- Mirrors: position left:-160px, top:50% -50%Y, width:760px, height:760px, border-radius:50% -->
+    <!-- Center at (-160+380, 160)=(220,160), radius=380 -->
+    <radialGradient id="cyanGlow" cx="0.5" cy="0.5" r="0.5" gradientUnits="objectBoundingBox">
+      <stop offset="0%"   stop-color="#06B6D4" stop-opacity="0.16"/>
+      <stop offset="38%"  stop-color="#06B6D4" stop-opacity="0.05"/>
+      <stop offset="68%"  stop-color="#06B6D4" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#06B6D4" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Fade overlay for mascot container: solid left → transparent right -->
+    <!-- Mirrors: linear-gradient(90deg, #0F172A 0%, rgba(15,23,42,0.85) 12%, rgba(15,23,42,0) 34%) -->
+    <linearGradient id="mascotFade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#0F172A" stop-opacity="1"/>
+      <stop offset="12%"  stop-color="#0F172A" stop-opacity="0.85"/>
+      <stop offset="34%"  stop-color="#0F172A" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0F172A" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Glow filter for "Perl" — mirrors CSS text-shadow: 0 0 28px rgba(6,182,212,0.45) -->
+    <filter id="glowCyan" x="-60%" y="-120%" width="220%" height="340%">
+      <feFlood flood-color="#06B6D4" flood-opacity="0.45" result="flood"/>
+      <feComposite in="flood" in2="SourceGraphic" operator="in" result="coloredShape"/>
+      <feGaussianBlur in="coloredShape" stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background: #0F172A (Slate Deep) -->
+  <rect width="1280" height="320" fill="#0F172A"/>
+
+  <!-- Cyan glow ellipse centered at (220, 160) r=380 -->
+  <ellipse cx="220" cy="160" rx="380" ry="380" fill="url(#cyanGlow)"/>
+
+  <!-- Raptor mascot (right side, facing the wordmark) -->
+  <!-- height:462px; right edge at 1280-54=1226px → x=1226-462=764; y=(320-462)/2=-71 -->
+  <image href="raptor-lateral-esquerda.png"
+         x="764" y="-71" width="462" height="462"
+         preserveAspectRatio="xMidYMid meet"/>
+
+  <!-- Left-to-transparent fade overlay over mascot container (x=520, w=760) -->
+  <rect x="520" y="0" width="760" height="320" fill="url(#mascotFade)"/>
+
+  <!-- Wordmark block — left:72px, vertically centered at y=160 -->
+  <!-- Block content height: ~211px → top ≈ 54px -->
+
+  <!-- "use Modern::Perl;" — JetBrains Mono 14px 500, #06B6D4, letter-spacing 0.04em -->
+  <text x="72" y="66"
+        font-family="'JetBrains Mono', 'Courier New', monospace"
+        font-size="14" font-weight="500"
+        letter-spacing="0.56"
+        fill="#06B6D4">use Modern::Perl;</text>
+
+  <!-- "Crystallized" — Inter 78px 800, #E2E8F0, letter-spacing -0.025em, line-height 0.96 -->
+  <text x="72" y="145"
+        font-family="'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+        font-size="78" font-weight="800"
+        letter-spacing="-1.95"
+        fill="#E2E8F0">Crystallized</text>
+
+  <!-- "Perl" — Inter 78px 800, #06B6D4, with cyan glow (text-shadow 0 0 28px rgba(6,182,212,0.45)) -->
+  <text x="72" y="219"
+        font-family="'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+        font-size="78" font-weight="800"
+        letter-spacing="-1.95"
+        fill="#06B6D4"
+        filter="url(#glowCyan)">Perl</text>
+
+  <!-- "# opinionated cloud-native stack" — JetBrains Mono 14px 400, #64748B, letter-spacing 0.01em -->
+  <text x="72" y="261"
+        font-family="'JetBrains Mono', 'Courier New', monospace"
+        font-size="14" font-weight="400"
+        letter-spacing="0.14"
+        fill="#64748B"># opinionated cloud-native stack</text>
+
+</svg>

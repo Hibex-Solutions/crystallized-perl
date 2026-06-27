@@ -1,0 +1,67 @@
+/* ADR-003: Paleta de Cores e Tipografia — implementação via tokens Docusaurus */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* ─── Modo Claro ─────────────────────────────────────────────────────────── */
+:root {
+  /* Docusaurus primary — Camel Blue histórico (ADR-003: --color-mosaic-blue) */
+  --ifm-color-primary: #007399;
+  --ifm-color-primary-dark: #006888;
+  --ifm-color-primary-darker: #005f7c;
+  --ifm-color-primary-darkest: #004e66;
+  --ifm-color-primary-light: #0080aa;
+  --ifm-color-primary-lighter: #008dbb;
+  --ifm-color-primary-lightest: #009fd1;
+
+  /* ADR-003 tokens — Modo Claro */
+  --color-bg: #ffffff;
+  --color-text: #0f172a;
+  --color-code-neutral: #2a2f3a;
+  --color-mosaic-blue: #007399;
+  --color-mosaic-orange: #f97316;
+  --color-mosaic-purple: #8b5cf6;
+  --color-accent-primary: #06b6d4;
+  --color-accent-secondary: #f43f5e;
+
+  /* Tipografia (ADR-003) */
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'Fira Code', 'Courier New',
+    Courier, monospace;
+
+  --ifm-code-font-size: 90%;
+}
+
+/* ─── Modo Escuro ────────────────────────────────────────────────────────── */
+[data-theme='dark'] {
+  /* Docusaurus primary — Âmbar Moderno (ADR-003: --color-accent-primary dark) */
+  --ifm-color-primary: #f59e0b;
+  --ifm-color-primary-dark: #d98a09;
+  --ifm-color-primary-darker: #c37b08;
+  --ifm-color-primary-darkest: #a66807;
+  --ifm-color-primary-light: #f6a827;
+  --ifm-color-primary-lighter: #f7b240;
+  --ifm-color-primary-lightest: #f9c165;
+
+  /* ADR-003 tokens — Modo Escuro */
+  --color-bg: #0f172a;
+  --color-text: #e2e8f0;
+  --color-code-neutral: #2a2f3a;
+  --color-mosaic-green: #10b981;
+  --color-mosaic-red: #f43f5e;
+  --color-mosaic-amber: #f59e0b;
+  --color-accent-primary: #f59e0b;
+  --color-accent-secondary: #d1d5db;
+
+  /* Fundo Slate Deep (ADR-003: --color-bg dark) */
+  --ifm-background-color: #0f172a;
+  --ifm-background-surface-color: #1e293b;
+  --ifm-navbar-background-color: #0f172a;
+  --ifm-footer-background-color: #0a1120;
+}
+
+/* ─── Syntax highlight — Perl code blocks ───────────────────────────────── */
+/* Garante que blocos de código usem JetBrains Mono */
+code, kbd, pre, samp {
+  font-family: var(--ifm-font-family-monospace);
+}

@@ -1,0 +1,51 @@
+name: Correção de Conteúdo
+description: Reporte um erro, imprecisão ou informação desatualizada na documentação
+labels: ["content", "correction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use este template para erros no **conteúdo** da documentação:
+        informações incorretas, links quebrados para fontes externas,
+        versões desatualizadas de ferramentas, código de exemplo com bugs,
+        ou imprecisões técnicas.
+
+        Para problemas técnicos com o site ou repositório, use o template **Bug Report**.
+
+  - type: textarea
+    id: location
+    attributes:
+      label: Localização do erro
+      description: Arquivo, seção e, se possível, número de linha.
+      placeholder: |
+        docs/guides/autenticacao.md, seção "Instalação", linha 42
+        — ou —
+        docs/adrs/ADR-004-framework-web.md, seção "Justificativa"
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Conteúdo atual (com erro)
+      description: Copie o trecho exato que está incorreto.
+    validations:
+      required: true
+
+  - type: textarea
+    id: correction
+    attributes:
+      label: Correção sugerida
+      description: Como o conteúdo deveria estar?
+    validations:
+      required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: Fonte que justifica a correção
+      description: |
+        Link ou referência que confirma que a correção é precisa.
+        Correções sem fonte podem ser descartadas se a informação for ambígua.
+    validations:
+      required: false

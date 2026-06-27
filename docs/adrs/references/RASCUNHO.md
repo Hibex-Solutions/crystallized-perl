@@ -1,3 +1,7 @@
+---
+unlisted: true
+---
+
 # Rascunho com ideia central para nome, mascote e paleta de cores
 
 > Essas são anotações de uma ideia para ser usada como base e definir um

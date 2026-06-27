@@ -1,0 +1,52 @@
+name: Relatório de Bug
+description: Reporte um problema técnico com o site ou repositório
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use este template para problemas técnicos: links quebrados no site,
+        erros de build, problemas com CI/CD ou comportamento inesperado do
+        repositório. Para erros no **conteúdo** da documentação, use o template
+        **Content Correction**.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descrição do problema
+      description: Descreva o bug de forma clara e objetiva.
+      placeholder: O que acontece e o que você esperava que acontecesse?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir
+      description: Sequência exata de passos para reproduzir o problema.
+      placeholder: |
+        1. Acesse ...
+        2. Clique em ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Ambiente
+      description: Navegador, sistema operacional, versão do Node.js (se relevante).
+      placeholder: |
+        - OS: Windows 11
+        - Navegador: Chrome 125
+        - Node.js: 20.x (se for bug de build local)
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto adicional
+      description: Logs, screenshots ou qualquer informação que ajude na investigação.
+    validations:
+      required: false

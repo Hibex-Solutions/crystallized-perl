@@ -1,0 +1,58 @@
+name: Proposta de Conteúdo
+description: Proponha um novo guia, nova seção do stack ou expansão de conteúdo existente
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use este template para propor **novo conteúdo** dentro do escopo do projeto:
+        guias, seções de stack, exemplos de código ou novos tópicos de documentação.
+
+        Antes de submeter, confirme que a proposta está dentro do
+        [escopo do projeto](../../README.md#what-this-stack-covers).
+        Propostas fora do escopo serão fechadas com justificativa.
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Tipo de conteúdo proposto
+      options:
+        - Novo guia (tutorial passo a passo)
+        - Nova página de referência de tecnologia (docs/stack/)
+        - Nova ADR (decisão arquitetural)
+        - Expansão de conteúdo existente
+        - Outro
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descrição da proposta
+      description: O que você quer adicionar e por quê é relevante para o stack?
+      placeholder: |
+        Guia de configuração de autenticação JWT com Mojolicious.
+        Justificativa: autenticação é um requisito universal para APIs REST
+        e não há guia cobrindo isso atualmente.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Escopo e pré-requisitos
+      description: |
+        O que o conteúdo proposto cobre? Quais ADRs existentes ele referencia?
+        Quais ferramentas e versões serão usadas?
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Fontes de referência
+      description: |
+        Liste ao menos uma fonte autoritativa que fundamenta a proposta
+        (documentação oficial, livro, RFC, post reconhecido).
+    validations:
+      required: true
