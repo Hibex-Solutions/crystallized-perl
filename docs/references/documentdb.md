@@ -6,10 +6,14 @@
 **Acessado**: 2026-06-26
 
 ## Relevância
-DocumentDB open source é um banco de dados de documentos compatível com a API do
-MongoDB. Oferece uma alternativa sem restrições de licença às versões recentes do
-MongoDB. Candidato para a ADR de banco de dados de documentos — relevante especialmente
-para cenários onde a licença SSPL do MongoDB é uma restrição.
+DocumentDB open source é uma extensão PostgreSQL que implementa o protocolo de wire do
+MongoDB, adicionando suporte a banco de dados de documentos JSON sobre o mesmo motor
+PostgreSQL já utilizado para dados relacionais. Essa arquitetura elimina a necessidade
+de um segundo serviço de banco de dados na infraestrutura: uma única instância
+PostgreSQL serve tanto queries SQL (via Mojo::Pg) quanto operações de documento
+(via Mango, que fala o protocolo MongoDB). No stack Crystallized Perl, DocumentDB é a
+camada não-relacional — a alternativa ao MongoDB sem introduzir nova tecnologia de
+infra.
 
 ## Referenciada em
-- A definir — candidato para ADR de banco de dados de documentos
+- ADR-017: Acesso a Dados de Documentos — PostgreSQL JSONB (alternativa considerada e rejeitada)

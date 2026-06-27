@@ -12,4 +12,4 @@ do ecossistema. Referência obrigatória para qualquer ADR ou guia que trate de
 gerenciamento de dependências, instalação de módulos e distribuição de código Perl.
 
 ## Referenciada em
-- A definir — disponível como referência para ADR de gerenciamento de dependências
+- ADR-005: Gerenciamento de Dependências — Carton + cpanm

@@ -148,28 +148,22 @@ crystallized-perl/
 │   │   └── og-image.png         ← 1200×630 Open Graph image
 │   └── fonts/                   ← if custom fonts are used in the site
 │
-└── site/                        ← generated output (git-ignored, never hand-edited)
+└── build/                       ← generated output Docusaurus (git-ignored, never hand-edited)
 ```
 
 ---
 
 ## Documentation Site
 
-**Decisão: Docusaurus** (escolhido pelo usuário).
-
-O scaffolding ainda não foi executado. Quando for iniciado:
-- Gerar a configuração na raiz do repositório
-- A saída do build vai para `build/` (padrão Docusaurus) e deve estar no `.gitignore`
-- Deploy via GitHub Actions para branch `gh-pages`
-- Não commitar arquivos gerados na branch `main`
-
 | Atributo | Decisão |
 |----------|---------|
-| Gerador | Docusaurus |
+| Gerador | Docusaurus (scaffolding já executado) |
 | Idioma do conteúdo | Português (pt-BR) |
 | URL do site | `hibex-solutions.github.io/crystallized-perl` |
 | Domínio customizado | Não (por ora) |
 | Search | Built-in do Docusaurus (Algolia pode ser adicionado depois) |
+| Saída de build | `build/` (padrão Docusaurus) — nunca commitar, já no `.gitignore` |
+| Deploy | GitHub Actions → branch `gh-pages` |
 
 ---
 
@@ -192,16 +186,47 @@ O padrão completo — template, campos de metadados e a relação bidirecional 
 referência correspondente em `docs/references/` e atualize a seção `## Referenciada em`
 de cada ADR ou guia que se apoia nessa fonte.
 
-### Guides
+### Guias de Usuário
 
-Guides live in `docs/guides/`. Each guide is a self-contained tutorial.
+Os guias residem em `docs/guides/`, escritos em **pt-BR** como todo o conteúdo em `docs/`.
+Cada guia é um tutorial autocontido usando a aplicação **Stega** como contexto (ver ADR-018).
 
-Guide requirements:
-- Must state prerequisites at the top
-- Must list the exact versions of all tools used (pinned, not ranges)
-- Must include a "What you will build" section with a concrete outcome
-- Must link to at least one ADR that justifies a technology choice in the guide
-- Must include a "Next steps" section
+Requisitos de cada guia:
+- Declarar pré-requisitos explícitos no início
+- Listar as versões exatas de todas as ferramentas usadas (fixadas, não intervalos)
+- Incluir uma seção "O que você vai construir" com resultado concreto
+- Referenciar ao menos uma ADR que justifique uma escolha tecnológica do guia
+- Incluir uma seção "Próximos passos"
+
+### Estilo de Escrita em Português (pt-BR)
+
+Todo o conteúdo em `docs/` é escrito em português do Brasil (pt-BR).
+
+**Proibido: anglicismos verbais.** Não conjugar verbos em inglês com sufixos do português:
+
+| Errado | Correto |
+|--------|---------|
+| deployado, deployar | implantado, implantar |
+| deploys (como substantivo genérico) | implantações |
+| startado, startar | iniciado, iniciar |
+| deletar, deletado | excluir, excluído |
+| setar, setado | definir, definido |
+| debugar | depurar |
+
+**Traduzir substantivos genéricos** quando há equivalente claro:
+
+| Inglês (evitar em prosa) | Português |
+|--------------------------|-----------|
+| deploy / deployment (sentido genérico) | implantação |
+| restart (sentido genérico) | reinicialização |
+| downtime | interrupção / indisponibilidade |
+
+**Exceções — manter em inglês:**
+- Nomes de recursos Kubernetes com maiúscula: `Deployment`, `Pod`, `Service`, `ConfigMap`
+- Flags de CLI que são nomes fixos: `--deployment`, `--no-restart`
+- Termos consagrados em pt-BR técnico: `container`, `framework`, `backend`, `worker`,
+  `CI/CD`, `pull request`, `build` (como substantivo)
+- Nomes de arquivos, variáveis, comandos e conteúdo de blocos de código: nunca traduzir
 
 ---
 
@@ -234,7 +259,7 @@ When creating repository root files, every item below must be satisfied:
 
 ### CODE_OF_CONDUCT.md
 - Use Contributor Covenant v2.1 exactly, with contact email filled in
-- Ask the user for the enforcement contact email before creating this file
+- Enforcement contact email: `opensource@hibex.co` (já definido)
 
 ### CHANGELOG.md
 - Follow [Keep a Changelog](https://keepachangelog.com) format
@@ -310,27 +335,31 @@ Guia visual: `docs/adrs/references/raptor-cristal-palette-draft.png`.
 
 ---
 
-## Technology Stack Decisions
+## Technology Stack — Decisões Tomadas
 
-**These are placeholders until ADRs are written.** Do not treat them as final.
-When building ADRs, the user will provide the rationale and reference links.
+Todas as decisões de stack estão registradas nas ADRs. Consulte a seção
+"Decisões Iniciais Resolvidas" abaixo para o índice completo com números de ADR.
 
-| Layer | Placeholder | Notes |
-|-------|-------------|-------|
-| Language | Perl 5.38+ | Confirm exact minimum version |
-| Web framework | TBD | User will decide with references |
-| ORM / DB access | TBD | User will decide with references |
-| Template engine | TBD | User will decide with references |
-| Job queue | TBD | User will decide with references |
-| HTTP client | TBD | User will decide with references |
-| Testing | TBD | User will decide with references |
-| Containerization | Docker | Princípio decidido — cloud-native first |
-| Orchestration | TBD | Kubernetes vs. alternativas mais simples — ADR pendente |
-| CI/CD | GitHub Actions | Matches hosting platform |
-| Docs site | Docusaurus | Decidido — scaffolding pendente |
+| Camada | Decisão |
+|--------|---------|
+| Linguagem | Perl 5.38+ (`requires 'perl', '5.038'` no cpanfile) |
+| Framework web | Mojolicious + Hypnotoad (ADR-004) |
+| Dependências | Carton + cpanm (ADR-005) |
+| Orientação a objetos | Moo + Moo::Role (ADR-006) |
+| Banco de dados | PostgreSQL 16 (ADR-007) |
+| Acesso relacional | Mojo::Pg + Mojo::Pg::Migrations (ADR-016) |
+| Dados documentais | PostgreSQL JSONB via Mojo::Pg (ADR-017) |
+| Message broker | RabbitMQ via AMQP 0-9-1 (ADR-008) |
+| Autenticação | Keycloak + JWT / Crypt::JWT (ADR-009) |
+| Contrato de API | OpenAPI v3 + Mojolicious::Plugin::OpenAPI (ADR-015) |
+| Testes | Test::Mojo + prove + Devel::Cover (ADR-011) |
+| Containerização | Docker multi-stage build (ADR-005, ADR-010) |
+| Orquestração | Kubernetes com InitContainer para migrations (ADR-010) |
+| CI/CD | GitHub Actions (workflows já configurados) |
+| Site de documentação | Docusaurus (scaffolding feito) |
 
-When the user provides their chosen tools and reference URLs, write one ADR per
-decision and one reference file per source, then update this table with links.
+Não há mais decisões de stack pendentes. Qualquer nova tecnologia requer uma ADR
+nova com referência externa, proposta pelo usuário.
 
 ---
 
@@ -339,12 +368,14 @@ decision and one reference file per source, then update this table with links.
 Follow this sequence when resuming work on this project:
 
 1. Re-read this file in full.
-2. Check `docs/adrs/` to understand what has already been decided.
-3. Check `docs/references/` to understand what sources are in play.
+2. Check `docs/adrs/` to understand what has already been decided. As of 2026-06-27
+   existem ADR-000 a ADR-018 cobrindo todo o stack. Não há mais decisões TBD.
+3. Check `docs/references/` to understand what sources are in play (36 fontes).
 4. Ask the user what they want to work on before creating files.
 5. If the user provides new reference URLs, create reference files first,
    then link them from relevant ADRs/guides.
-6. Never invent a technology choice. If something is TBD, ask before filling it in.
+6. Todas as decisões de stack estão tomadas. A próxima fase é escrever guias
+   de usuário em `docs/guides/`, usando a Stega (ADR-018) como aplicação de referência.
 7. Never add files to the repository root that are not listed in the
    Repository Structure section without asking first.
 
@@ -364,9 +395,7 @@ Follow this sequence when resuming work on this project:
 - Do not add any technology to the stack without an ADR
 - Do not include data science, ML, or analytics content
 - Do not write code examples in Perl versions older than the declared minimum
-- Do not commit the `site/` or `build/` directories
-- Do not add a Code of Conduct without the enforcement contact email
-- Do not create the docs site scaffold until the user has confirmed the site generator
+- Do not commit the `build/` directory (Docusaurus output — already in `.gitignore`)
 - Do not add files to the repository root not listed in the Repository Structure section
 
 ---
@@ -388,7 +417,22 @@ Todas as questões de fundação estão respondidas. As decisões estão registr
 | Paleta de cores | Sistema dual light/dark cristalino | ADR-003 |
 | Tipografia | Inter + JetBrains Mono | ADR-003 |
 | Padrão de ADRs | Definido em ADR-000 | ADR-000 |
-| Referências externas | 28 fontes em `docs/references/` | — |
+| Framework web | Mojolicious + Hypnotoad | ADR-004 |
+| Gerenciamento de dependências | Carton + cpanm | ADR-005 |
+| Sistema de OO | Moo + Moo::Role | ADR-006 |
+| Banco de dados | PostgreSQL 16 | ADR-007 |
+| Message broker | RabbitMQ (AMQP 0-9-1) | ADR-008 |
+| Autenticação | Keycloak + JWT (Crypt::JWT) | ADR-009 |
+| Orquestração | Kubernetes | ADR-010 |
+| Estratégia de testes | Test::Mojo + prove + Devel::Cover | ADR-011 |
+| Estrutura mínima de projeto | `.gitignore`, `.gitattributes`, README, DEVELOPMENT | ADR-012 |
+| Scripts de engenharia | Perl em `eng/`, wrappers `.ps1` para Windows | ADR-013 |
+| Ambiente de desenvolvimento local | perlbrew / berrybrew / Docker Compose | ADR-014 |
+| Contrato de API | OpenAPI v3 + Mojolicious::Plugin::OpenAPI | ADR-015 |
+| Acesso a dados relacional | Mojo::Pg + Mojo::Pg::Migrations | ADR-016 |
+| Acesso a dados documentais | PostgreSQL JSONB via Mojo::Pg | ADR-017 |
+| Aplicação de demonstração | Stega (hibex-solutions/crystallized-perl-stega) | ADR-018 |
+| Referências externas | 36 fontes em `docs/references/` | — |
 
-**Próximos passos**: scaffolding do Docusaurus, depois ADRs de stack (framework web,
-banco de dados, ORM, message broker, testes, orquestração).
+**Próximos passos**: escrever os guias de usuário em `docs/guides/`, usando a Stega
+(ADR-018) como aplicação de referência. O scaffolding do Docusaurus já está feito.

@@ -14,4 +14,12 @@ stack deve ser avaliada contra estes fatores. Mencionada explicitamente no brief
 identidade visual como fundamento conceitual do mascote.
 
 ## Referenciada em
-- A definir — referência arquitetural transversal a múltiplas ADRs
+- ADR-005: Gerenciamento de Dependências — Carton + cpanm
+- ADR-007: Banco de Dados Relacional — PostgreSQL
+- ADR-008: Message Broker — RabbitMQ
+- ADR-009: Autenticação e Identidade — Keycloak + JWT
+- ADR-010: Orquestração de Contêineres — Kubernetes
+- ADR-012: Estrutura Mínima de Projeto Crystallized Perl
+- ADR-013: Scripts de Engenharia em Perl
+- ADR-014: Ambiente de Desenvolvimento Local
+- ADR-016: Acesso a Dados Relacional — Mojo::Pg e Migrations

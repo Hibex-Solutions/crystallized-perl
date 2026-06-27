@@ -13,4 +13,4 @@ e worker rodam juntos com um único comando. Referência para o guia de setup do
 ambiente local.
 
 ## Referenciada em
-- A definir — referência para guia de ambiente de desenvolvimento local
+- [ADR-014](../adrs/ADR-014-ambiente-de-desenvolvimento-local.md) — ambiente de desenvolvimento local usa Docker Compose para todos os serviços de apoio

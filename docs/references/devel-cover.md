@@ -13,4 +13,4 @@ estratégia de testes — cobertura de código é um requisito do stack para ser
 em produção.
 
 ## Referenciada em
-- A definir — disponível como referência para ADR de estratégia de testes
+- [ADR-011](../adrs/ADR-011-estrategia-de-testes.md) — escolhido como ferramenta de métricas de cobertura de código no stack

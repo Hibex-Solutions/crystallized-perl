@@ -12,4 +12,5 @@ para a ADR de containerização e para os guias de configuração de ambiente de
 desenvolvimento e produção.
 
 ## Referenciada em
-- A definir — referência para ADR de containerização
+- ADR-010: Orquestração de Contêineres — Kubernetes
+- ADR-014: Ambiente de Desenvolvimento Local

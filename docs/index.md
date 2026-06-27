@@ -26,7 +26,7 @@ O projeto cobre:
 - Workers em background e filas de jobs
 - Autenticação, autorização e gerenciamento de sessões
 - Observabilidade: logging, métricas e rastreamento distribuído
-- Containerização com Docker e deploy cloud-native
+- Containerização com Docker e implantação cloud-native
 - Pipelines de CI/CD e estratégia de testes
 
 ## Por onde começar
@@ -44,7 +44,7 @@ As primeiras quatro ADRs estabelecem o padrão de documentação e a identidade 
 
 ### Explore as referências
 
-O projeto mantém uma [biblioteca anotada de 28 fontes externas](/references/perl-org)
+O projeto mantém uma [biblioteca anotada de 36 fontes externas](/references/perl-org)
 que fundamentam cada decisão arquitetural — livros, documentações oficiais, RFCs e
 referências da comunidade.
 

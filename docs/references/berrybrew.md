@@ -14,4 +14,6 @@ Windows — garantindo que o projeto seja acessível em multiplataforma desde o 
 Documentação de uso: [berrybrew Usage Guide](https://github.com/dnmfarrell/berrybrew/blob/master/doc/berrybrew.md)
 
 ## Referenciada em
-- A definir — disponível como referência para guia de configuração do ambiente local (Windows)
+- ADR-012: Estrutura Mínima de Projeto Crystallized Perl
+- ADR-013: Scripts de Engenharia em Perl
+- ADR-014: Ambiente de Desenvolvimento Local

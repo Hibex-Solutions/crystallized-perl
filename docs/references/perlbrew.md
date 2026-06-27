@@ -13,4 +13,6 @@ local no stack — componente essencial para garantir a versão mínima de Perl 
 no projeto.
 
 ## Referenciada em
-- A definir — disponível como referência para guia de configuração do ambiente local (Unix)
+- ADR-012: Estrutura Mínima de Projeto Crystallized Perl
+- ADR-013: Scripts de Engenharia em Perl
+- ADR-014: Ambiente de Desenvolvimento Local

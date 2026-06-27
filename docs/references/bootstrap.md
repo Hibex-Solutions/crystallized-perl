@@ -12,4 +12,4 @@ de estilo. Candidato para a ADR de framework de UI em aplicações web server-re
 integra diretamente com templates Mojolicious sem necessidade de build step complexo.
 
 ## Referenciada em
-- A definir — candidato para ADR de framework de UI / frontend
+- A definir — disponível como referência para guias de aplicações web com HTML server-rendered (templates Mojolicious). Não haverá ADR dedicada a Bootstrap — frameworks de UI são complementares ao stack, não decisões de infraestrutura.

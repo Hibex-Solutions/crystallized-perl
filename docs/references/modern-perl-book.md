@@ -19,3 +19,5 @@ cultura "Modern Perl" que o projeto abraça.
 - ADR-001: Nome Oficial do Projeto
 - ADR-002: Mascote — Raptor Cristalizado
 - ADR-003: Paleta de Cores e Tipografia
+- ADR-004: Framework Web — Mojolicious
+- ADR-006: Sistema de Orientação a Objetos — Moo

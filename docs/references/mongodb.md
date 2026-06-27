@@ -12,4 +12,4 @@ amplo de ferramentas. Candidato para a ADR de banco de dados de documentos, aval
 em conjunto com o DocumentDB open source como alternativa de licença aberta.
 
 ## Referenciada em
-- A definir — candidato para ADR de banco de dados de documentos
+- [ADR-017](../adrs/ADR-017-acesso-a-dados-documentos-jsonb.md) — considerado e rejeitado como banco de dados de documentos (licença SSPL, driver Perl síncrono); PostgreSQL JSONB foi escolhido

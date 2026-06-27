@@ -12,4 +12,4 @@ de um dos seus contribuidores relevantes. Contextualiza a escolha do Devel::Cove
 ferramenta de qualidade no stack.
 
 ## Referenciada em
-- A definir — disponível como referência para ADR de cobertura de testes
+- [ADR-011](../adrs/ADR-011-estrategia-de-testes.md) — justifica a escolha do Devel::Cover como ferramenta de cobertura de código

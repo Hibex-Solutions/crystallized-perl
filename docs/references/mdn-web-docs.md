@@ -12,4 +12,4 @@ e boas práticas de frontend. Utilizada como base para guias de integração fro
 em aplicações web com backend Perl.
 
 ## Referenciada em
-- A definir — disponível como referência para guias de integração frontend
+- A definir — disponível como referência para guias de aplicações web (padrões HTTP, REST, comportamento de APIs no navegador)

@@ -1,0 +1,261 @@
+# ADR-009: Autenticação e Identidade — Keycloak + JWT
+
+**Status**: Aceita  
+**Data**: 2026-06-27
+
+## Contexto
+
+APIs e workers precisam de autenticação stateless compatível com o fator VI do
+12-factor (processos sem estado). Sessões armazenadas em arquivo ou memória local
+vinculam requisições a uma instância específica do Pod — o que é incompatível com a
+escala horizontal do Kubernetes. A solução deve:
+
+- Validar identidade sem chamada de rede por requisição (performance em escala)
+- Suportar comunicação machine-to-machine (workers chamando APIs)
+- Ser operável como serviço self-hosted em Kubernetes (sem dependência de SaaS pago)
+
+## Decisão
+
+**Keycloak** como Identity Provider (IdP) externo, **JWT** como formato de token de
+acesso, **Crypt::JWT** para validação local do token usando a chave pública do Keycloak
+obtida via endpoint JWKS.
+
+## Justificativa
+
+O Keycloak é o provedor de identidade open source líder do ecossistema cloud-native.
+Implementa OpenID Connect e OAuth 2.0, roda como container em Kubernetes e é adotado
+por organizações que precisam de controle total sobre dados de identidade.
+
+**Validação local via JWKS** é o padrão de performance para JWT: a API baixa a chave
+pública do Keycloak uma vez (no startup) e valida todos os tokens localmente — sem
+chamada de rede ao Keycloak em cada requisição. A rotação de chaves do Keycloak é
+tratada via refresh periódico do JWKS.
+
+**Crypt::JWT** é o módulo Perl para codificação e decodificação de JWT (RS256, ES256,
+HS256), com suporte a validação de `exp`, `iss`, `aud` e claims customizados.
+
+O fluxo **client_credentials** do OAuth 2.0 cobre a comunicação machine-to-machine:
+um worker ou microserviço obtém um token de acesso do Keycloak usando suas próprias
+credenciais (`client_id` + `client_secret`) e usa esse token para chamar APIs
+protegidas.
+
+Referências: [Keycloak](../references/keycloak.md),
+[The Twelve-Factor App](../references/twelve-factor-app.md),
+[Mojolicious](../references/mojolicious.md)
+
+### Fluxo de autenticação de usuário final
+
+```
+Usuário → Login no Keycloak → Recebe JWT access token
+JWT access token → Authorization: Bearer <token> na requisição à API
+API → valida token localmente com chave pública do Keycloak (JWKS)
+API → extrai claims (sub, email, roles) do payload do JWT
+```
+
+### Fluxo machine-to-machine (workers e microserviços)
+
+```
+Worker → POST /realms/{realm}/protocol/openid-connect/token
+         com grant_type=client_credentials, client_id, client_secret
+Worker recebe → access token JWT
+Worker → Authorization: Bearer <token> na chamada à API
+```
+
+### Configuração via variáveis de ambiente
+
+```bash
+KEYCLOAK_URL=https://auth.example.com
+KEYCLOAK_REALM=myapp
+KEYCLOAK_CLIENT_ID=myapp-api
+KEYCLOAK_CLIENT_SECRET=secret  # apenas para workers/M2M
+JWT_ISSUER=https://auth.example.com/realms/myapp
+JWT_AUDIENCE=myapp-api
+```
+
+### Carregamento do JWKS no startup
+
+```perl
+# lib/MyApp.pm
+use Mojo::Base 'Mojolicious';
+use Mojo::UserAgent;
+use Crypt::JWT qw(decode_jwt);
+
+sub startup {
+    my $self = shift;
+
+    # Carregar chaves públicas do Keycloak (JWKS) no startup
+    my $jwks_url = $ENV{KEYCLOAK_URL}
+        . '/realms/' . $ENV{KEYCLOAK_REALM}
+        . '/protocol/openid-connect/certs';
+
+    my $ua   = Mojo::UserAgent->new;
+    my $jwks = $ua->get($jwks_url)->result->json;
+
+    # Disponibilizar JWKS via helper (acessível em controladores e na própria app)
+    $self->helper(jwks => sub { $jwks });
+
+    # Helper de validação de JWT disponível nos controladores
+    $self->helper(_validate_jwt => \&_validate_jwt_impl);
+
+    $self->plugin('OpenAPI', {
+        url      => $self->home->rel_file('api/openapi.yaml'),
+        security => {
+            BearerAuth => sub {
+                my ($c, $def, $scopes, $cb) = @_;
+                my $claims = $c->_validate_jwt;
+                return $c->$cb() if $claims;
+                $c->render(json => { error => 'Unauthorized' }, status => 401);
+                return $c->$cb('Unauthorized');
+            },
+        },
+    });
+}
+
+sub _validate_jwt_impl {
+    my $self = shift;
+
+    my $auth   = $self->req->headers->authorization // '';
+    my ($token) = $auth =~ /^Bearer\s+(.+)$/i;
+    return unless $token;
+
+    my $claims = eval {
+        decode_jwt(
+            token     => $token,
+            key_func  => sub { $self->jwks },   # chave pública do JWKS via helper
+            verify_iss => $ENV{JWT_ISSUER},
+            verify_aud => $ENV{JWT_AUDIENCE},
+        );
+    };
+    return if $@;   # token inválido ou expirado
+
+    # Armazenar claims na stash para uso nos controladores
+    $self->stash('jwt_claims', $claims);
+    return $claims;
+}
+
+1;
+```
+
+### Acessando claims nos controladores
+
+```perl
+# lib/MyApp/Controller/User.pm
+package MyApp::Controller::User;
+use Mojo::Base 'Mojolicious::Controller';
+
+sub profile {
+    my $self   = shift;
+    my $claims = $self->stash('jwt_claims');
+
+    # Sub (subject) é o ID do usuário no Keycloak
+    my $user_id = $claims->{sub};
+    my $email   = $claims->{email};
+    my $roles   = $claims->{realm_access}{roles} // [];
+
+    $self->render(json => {
+        user_id => $user_id,
+        email   => $email,
+        roles   => $roles,
+    });
+}
+
+1;
+```
+
+### Obtenção de token em workers (client_credentials)
+
+```perl
+# lib/MyApp/Auth/ClientCredentials.pm
+package MyApp::Auth::ClientCredentials;
+use Moo;
+use Mojo::UserAgent;
+use namespace::clean;
+
+has 'ua'     => ( is => 'ro', default => sub { Mojo::UserAgent->new } );
+has '_token' => ( is => 'rw' );
+has '_exp'   => ( is => 'rw', default => 0 );
+
+sub token {
+    my $self = shift;
+
+    # Reutilizar token existente se ainda válido (com margem de 60s)
+    return $self->_token if time() < ($self->_exp - 60);
+
+    my $res = $self->ua->post(
+        $ENV{KEYCLOAK_URL} . '/realms/' . $ENV{KEYCLOAK_REALM}
+            . '/protocol/openid-connect/token',
+        form => {
+            grant_type    => 'client_credentials',
+            client_id     => $ENV{KEYCLOAK_CLIENT_ID},
+            client_secret => $ENV{KEYCLOAK_CLIENT_SECRET},
+        }
+    )->result;
+
+    die "Falha ao obter token: " . $res->body unless $res->is_success;
+
+    my $data = $res->json;
+    $self->_token($data->{access_token});
+    $self->_exp(time() + $data->{expires_in});
+
+    return $self->_token;
+}
+
+1;
+```
+
+```perl
+# Uso no worker ao chamar outra API protegida
+my $auth   = MyApp::Auth::ClientCredentials->new;
+my $result = $ua->get(
+    'http://other-service/api/v1/data',
+    { Authorization => 'Bearer ' . $auth->token }
+)->result->json;
+```
+
+### Docker Compose: Keycloak em desenvolvimento
+
+```yaml
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev
+    environment:
+      KC_DB:            dev-file
+      KEYCLOAK_ADMIN:   admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+```
+
+## Alternativas Consideradas
+
+| Alternativa | Motivo da rejeição |
+|-------------|-------------------|
+| **Sessões locais (Mojolicious::Sessions)** | Com estado: vincula o cliente a uma instância específica do Pod, incompatível com escala horizontal no Kubernetes |
+| **Auth0 / Okta** | Serviços SaaS com custo por usuário ativo; vendor lock-in; dados de identidade em infraestrutura de terceiros |
+| **Token Introspection (chamada ao Keycloak por requisição)** | Latência adicional em cada requisição; Keycloak vira single point of failure síncrono da API |
+| **Dex** | Alternativa open source ao Keycloak, mas com menor ecossistema e sem interface administrativa madura |
+| **HTTP Basic Auth** | Sem suporte a tokens de curta duração, sem RBAC integrado, sem M2M; insuficiente para arquitetura cloud-native |
+
+## Consequências
+
+**Positivo**:
+- Validação local: nenhuma chamada de rede ao Keycloak em cada requisição
+- Stateless: qualquer réplica da API valida qualquer token
+- client_credentials cobre M2M sem gerenciar sessões manualmente
+- Keycloak self-hosted: sem dependência de SaaS e sem custo por usuário
+
+**Negativo**:
+- Keycloak é um serviço adicional na infraestrutura (requer mais recursos de memória)
+- Rotação de chaves JWKS requer mecanismo de refresh periódico ou no startup
+- O `exp` (expiração) do JWT deve ser monitorado: tokens longos aumentam janela de
+  risco; tokens curtos aumentam frequência de refresh nos clientes
+
+**Ações necessárias**:
+- Adicionar `Crypt::JWT` ao `cpanfile`
+- Adicionar serviço `keycloak` ao Docker Compose com configuração de realm de
+  desenvolvimento
+- Configurar Secret no Kubernetes com `KEYCLOAK_URL`, `KEYCLOAK_REALM`,
+  `KEYCLOAK_CLIENT_ID` e `KEYCLOAK_CLIENT_SECRET` para workers
+- Implementar refresh do JWKS (recarregar chaves periodicamente ou ao receber erro 401
+  downstream)

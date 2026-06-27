@@ -12,4 +12,4 @@ Referência central para ADRs sobre modelagem de domínio, organização de clas
 escolha de sistema de OO no stack.
 
 ## Referenciada em
-- A definir — disponível como referência para ADR de sistema de OO
+- ADR-006: Sistema de Orientação a Objetos — Moo

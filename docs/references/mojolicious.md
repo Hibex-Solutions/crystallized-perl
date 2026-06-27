@@ -12,4 +12,12 @@ e testes — tudo sem dependências externas além do core. Candidato principal 
 de framework web do stack.
 
 ## Referenciada em
-- A definir — candidato para ADR de framework web
+- ADR-004: Framework Web — Mojolicious
+- ADR-006: Sistema de Orientação a Objetos — Moo
+- ADR-008: Message Broker — RabbitMQ
+- ADR-009: Autenticação e Identidade — Keycloak + JWT
+- ADR-010: Orquestração de Contêineres — Kubernetes
+- ADR-011: Estratégia de Testes
+- ADR-013: Scripts de Engenharia em Perl
+- ADR-015: Contrato de API — OpenAPI v3
+- ADR-018: Aplicação de Demonstração — Pluma

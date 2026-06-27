@@ -12,4 +12,7 @@ replicação. Candidato principal para a ADR de banco de dados relacional do sta
 compatível com todos os ORMs e clientes Perl relevantes.
 
 ## Referenciada em
-- A definir — candidato para ADR de banco de dados relacional
+- ADR-007: Banco de Dados Relacional — PostgreSQL
+- ADR-016: Acesso a Dados Relacional — Mojo::Pg e Migrations
+- ADR-017: Acesso a Dados de Documentos — PostgreSQL JSONB
+- ADR-018: Aplicação de Demonstração — Pluma

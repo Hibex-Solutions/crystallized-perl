@@ -12,4 +12,4 @@ Inclui links para perlintro, perlootut, perlstyle e demais documentos de boas pr
 recomendadas pela própria comunidade core do Perl.
 
 ## Referenciada em
-- A definir — disponível como referência para guias de onboarding e boas práticas
+- ADR-011: Estratégia de Testes
