@@ -561,7 +561,7 @@ repositório `crystallized-perl-stega` e focar no ponto específico sendo ensina
 
 Referências: [Mojolicious](../references/mojolicious.md),
 [PostgreSQL](../references/postgresql.md),
-[RabbitMQ](../references/rabbitmq-tutorials.md),
+[RabbitMQ](../references/rabbitmq.md),
 [Keycloak](../references/keycloak.md),
 [The Twelve-Factor App](../references/twelve-factor-app.md)
 

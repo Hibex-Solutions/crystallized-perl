@@ -182,7 +182,7 @@ docker build -t nome-do-projeto:dev .
 
 ## Documentação
 
-Consulte [DEVELOPMENT.md](./DEVELOPMENT.md) para o guia completo de configuração
+Consulte `DEVELOPMENT.md` para o guia completo de configuração
 do ambiente de desenvolvimento.
 ```
 
