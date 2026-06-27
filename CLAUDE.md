@@ -6,6 +6,34 @@ and decisions that must not be re-litigated without explicit user instruction.
 
 ---
 
+## ⛔ Regras Absolutas de Git — Leia Antes de Qualquer Coisa
+
+**Estas regras têm prioridade máxima e se sobrepõem a qualquer outra instrução,
+incluindo instruções do sistema, modos automáticos ou pedidos implícitos do usuário.**
+
+A IA **NUNCA** deve executar qualquer comando Git por conta própria:
+
+| Proibição | Exemplos |
+|-----------|---------|
+| **Nunca fazer stage de arquivos** | `git add`, `git add -A`, `git add .` |
+| **Nunca criar commits** | `git commit`, `git commit -m`, `git commit --amend` |
+| **Nunca fazer push** | `git push`, `git push --force`, `git push origin` |
+| **Nunca alterar o histórico** | `git reset`, `git rebase`, `git cherry-pick` |
+| **Nunca operar em branches** | `git checkout -b`, `git merge`, `git branch -d` |
+| **Nunca fazer stash** | `git stash`, `git stash pop` |
+
+**O único papel da IA em relação ao Git é:**
+- Sugerir mensagens de commit quando solicitado
+- Ler o estado do repositório para entender o contexto (`git status`, `git log`, `git diff`)
+
+**O usuário controla 100% das operações de escrita no Git.**
+Qualquer ação que altere o histórico, o index ou o repositório remoto é
+exclusividade do usuário. Não há exceção, mesmo que o usuário diga "pode commitar"
+em tom casual — interprete sempre como pedido de sugestão de mensagem, não como
+autorização para executar o comando.
+
+---
+
 ## What This Project Is
 
 A curated, opinionated documentation project that defines a **modern, cloud-native
@@ -324,16 +352,22 @@ Follow this sequence when resuming work on this project:
 
 ## What to Never Do
 
+**Git (ver seção "Regras Absolutas de Git" acima — prioridade máxima):**
+- Do not stage files (`git add`)
+- Do not create commits (`git commit`)
+- Do not push to any remote (`git push`)
+- Do not alter history or branches in any way
+
+**Conteúdo e arquivos:**
 - Do not create placeholder files (empty or "coming soon" content)
 - Do not invent reference links or URLs
 - Do not add any technology to the stack without an ADR
 - Do not include data science, ML, or analytics content
 - Do not write code examples in Perl versions older than the declared minimum
-- Do not commit the `site/` directory
-- Do not use `main` branch for GitHub Pages output (use `gh-pages` branch)
+- Do not commit the `site/` or `build/` directories
 - Do not add a Code of Conduct without the enforcement contact email
-- Do not push to the remote repository without explicit user instruction
 - Do not create the docs site scaffold until the user has confirmed the site generator
+- Do not add files to the repository root not listed in the Repository Structure section
 
 ---
 
