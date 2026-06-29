@@ -94,7 +94,7 @@ with all of them.
 3. **Stack cohesion**: The project defines *a* stack, not *a menu*. Readers follow
    it as defined. Optional variations are documented as named variants, not open lists.
 
-4. **Modern Perl**: Target Perl 5.38+ (or the latest stable at time of writing).
+4. **Modern Perl**: Target Perl 5.42+ (or the latest stable at time of writing).
    Explicitly prohibit archaic patterns (no `use base`, no indirect method calls, no
    two-argument `open`, no `$_` abuse in tutorials).
 
@@ -342,7 +342,7 @@ Todas as decisões de stack estão registradas nas ADRs. Consulte a seção
 
 | Camada | Decisão |
 |--------|---------|
-| Linguagem | Perl 5.38+ (`requires 'perl', '5.038'` no cpanfile) |
+| Linguagem | Perl 5.42+ (`requires 'perl', '5.042'` no cpanfile) |
 | Framework web | Mojolicious + Hypnotoad (ADR-004) |
 | Dependências | Carton + cpanm (ADR-005) |
 | Orientação a objetos | Moo + Moo::Role (ADR-006) |

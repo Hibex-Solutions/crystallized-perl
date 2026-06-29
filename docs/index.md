@@ -1,6 +1,6 @@
 ---
-slug: /
-title: Início
+slug: /introduction
+title: Introdução
 sidebar_position: 1
 ---
 
@@ -31,7 +31,26 @@ O projeto cobre:
 
 ## Por onde começar
 
-### Leia as decisões fundacionais
+### Novo no stack
+
+Siga a trilha de guias — cada um pressupõe o anterior:
+
+| Guia | O que cobre |
+|------|------------|
+| [Guia 1 — Ambiente de Desenvolvimento](/guides/ambiente-de-desenvolvimento) | Perl 5.42, Carton, Docker Compose com PostgreSQL/RabbitMQ/Keycloak |
+| [Guia 2 — Estrutura Mínima de Projeto](/guides/estrutura-minima-de-projeto) | cpanfile, .gitattributes, DEVELOPMENT.md — esqueleto da Stega |
+| [Guia 3 — Primeira Rota com Mojolicious](/guides/primeira-rota-mojolicious) | Stega.pm, controller, GET /healthz, Test::Mojo |
+
+### Referência por tecnologia
+
+A seção [Stack](/stack) tem uma página por tecnologia com comandos essenciais
+e padrões de uso no contexto da Stega:
+[Mojolicious](/stack/mojolicious) · [Carton](/stack/carton) · [Moo](/stack/moo) ·
+[PostgreSQL](/stack/postgresql) · [Mojo::Pg](/stack/mojo-pg) ·
+[RabbitMQ](/stack/rabbitmq) · [Keycloak](/stack/keycloak) · [Docker](/stack/docker) ·
+[Kubernetes](/stack/kubernetes) · [OpenAPI](/stack/openapi) · [Testes](/stack/testes)
+
+### Entenda as decisões
 
 As primeiras quatro ADRs estabelecem o padrão de documentação e a identidade do projeto:
 
@@ -53,7 +72,7 @@ referências da comunidade.
 1. **Reference-first** — toda decisão cita ao menos uma fonte externa documentada
 2. **Decision transparency** — cada escolha significativa tem uma ADR com motivação e alternativas
 3. **Stack cohesion** — este projeto define *um* stack, não um menu de opções
-4. **Modern Perl** — Perl 5.38+ obrigatório; padrões arcaicos explicitamente proibidos
+4. **Modern Perl** — Perl 5.42+ obrigatório; padrões arcaicos explicitamente proibidos
 5. **Cloud-native first** — tudo roda em containers; desenvolvimento local usa Docker Compose
 
 ## Contribuindo

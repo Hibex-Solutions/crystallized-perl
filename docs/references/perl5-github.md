@@ -11,4 +11,4 @@ ativamente em open source com releases regulares. Permite consultar changelogs d
 específicas, o que fundamenta ADRs que declaram versão mínima suportada do Perl.
 
 ## Referenciada em
-- [ADR-005](../adrs/ADR-005-gerenciamento-de-dependencias.md) — fundamenta a declaração da versão mínima do Perl (`requires 'perl', '5.038'` no cpanfile)
+- [ADR-005](../adrs/ADR-005-gerenciamento-de-dependencias.md) — fundamenta a declaração da versão mínima do Perl (`requires 'perl', '5.042'` no cpanfile)

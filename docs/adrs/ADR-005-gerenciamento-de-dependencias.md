@@ -52,7 +52,7 @@ Referências: [Carton](../references/carton.md),
 
 ```perl
 # Versão mínima do Perl
-requires 'perl', '5.038';
+requires 'perl', '5.042';
 
 # Dependências de produção
 requires 'Mojolicious',                 '9.0';
@@ -96,7 +96,7 @@ carton exec prove -lr t/
 
 ```dockerfile
 # ── Estágio de build ─────────────────────────────────────────────────────────
-FROM perl:5.38 AS build
+FROM perl:5.42 AS build
 
 WORKDIR /app
 
@@ -110,7 +110,7 @@ COPY cpanfile cpanfile.snapshot ./
 RUN carton install --deployment
 
 # ── Estágio de produção ───────────────────────────────────────────────────────
-FROM perl:5.38-slim AS production
+FROM perl:5.42-slim AS production
 
 WORKDIR /app
 

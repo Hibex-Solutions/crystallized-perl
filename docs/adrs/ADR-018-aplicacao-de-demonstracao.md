@@ -554,7 +554,7 @@ crystallized-perl-stega/
 |---------------|-----------|----------------|
 | **Trecho** | Fragmento de código isolado | Demonstrar um operador JSONB, uma query com `tsvector` |
 | **Componente** | Um módulo ou rota completa | Tutorial de `Stega::Controller::Ticket` com busca indexada |
-| **Aplicação** | A Stega inteira, clonável | Guia de setup completo do ambiente de desenvolvimento |
+| **Aplicação** | A Stega inteira, clonável | Guia de configuração completo do ambiente de desenvolvimento |
 
 Os guias **não** precisam implementar a Stega do zero — podem referenciar o
 repositório `crystallized-perl-stega` e focar no ponto específico sendo ensinado.

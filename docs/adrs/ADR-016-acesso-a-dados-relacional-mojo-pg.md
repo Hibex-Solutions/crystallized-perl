@@ -154,7 +154,7 @@ de `migrations/` em ordem, concatenando-os antes de passar ao `from_string()`:
 #!/usr/bin/env perl
 # eng/migrate.pl — aplica migrations pendentes ao banco
 
-use v5.38;
+use v5.42;
 use lib 'lib';
 use Mojo::File qw(path);
 use Mojo::Pg;
@@ -362,7 +362,7 @@ sub transfer {
   simples
 - Múltiplos arquivos requerem carregador customizado (a lógica em `eng/migrate.pl`
   é simples, mas é código extra que não existe com o `from_file()` nativo)
-- Dois usuários de banco precisam ser provisionados no setup inicial de cada ambiente
+- Dois usuários de banco precisam ser provisionados na configuração inicial de cada ambiente
 
 **Ações necessárias**:
 - Criar diretório `migrations/` na raiz do projeto com arquivos numerados

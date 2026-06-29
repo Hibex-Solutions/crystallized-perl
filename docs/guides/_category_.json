@@ -1,0 +1,9 @@
+{
+  "label": "Guias",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "slug": "/guides",
+    "description": "Tutoriais passo a passo usando a aplicação Stega como referência — cada guia cobre um aspecto concreto do stack Crystallized Perl."
+  }
+}

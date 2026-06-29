@@ -37,7 +37,7 @@ arquivo `.t` como processo independente, coleta saída TAP e reporta resultados.
 permite bloquear implantações abaixo de um limiar de cobertura configurável.
 
 O princípio de análise estática em tempo de compilação do Perl (`use strict`,
-`use warnings`, ou implicitamente via `use v5.38`) funciona como um primeiro nível de
+`use warnings`, ou implicitamente via `use v5.42`) funciona como um primeiro nível de
 "teste" antes dos testes formais rodarem.
 
 Referências: [Mojolicious](../references/mojolicious.md),
@@ -211,7 +211,7 @@ RUN carton install
 RUN carton exec prove -lr t/
 
 # ── Estágio de produção (só alcançado se os testes passarem) ──────────────
-FROM perl:5.38-slim AS production
+FROM perl:5.42-slim AS production
 
 # COPY --from=test cria dependência explícita no estágio de teste:
 # Docker só constrói esta imagem se o estágio test concluir com sucesso.
@@ -244,7 +244,7 @@ jobs:
       - name: Instalar Perl
         uses: shogo82148/actions-setup-perl@v1
         with:
-          perl-version: '5.38'
+          perl-version: '5.42'
 
       - name: Instalar dependências com Carton
         run: |

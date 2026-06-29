@@ -1,0 +1,8 @@
+{
+  "label": "Primeiros Passos",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Visão geral do stack Crystallized Perl, pré-requisitos e como navegar nesta documentação."
+  }
+}

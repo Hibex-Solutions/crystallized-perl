@@ -112,7 +112,7 @@ sub check {
 ### Servidor de desenvolvimento vs. produção
 
 ```bash
-# Desenvolvimento: servidor com hot-reload
+# Desenvolvimento: servidor com recarga automática
 carton exec perl script/my_app.pl daemon --listen http://*:3000
 
 # Produção: Hypnotoad com pre-forking

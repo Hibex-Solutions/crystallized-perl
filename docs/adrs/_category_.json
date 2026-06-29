@@ -1,6 +1,6 @@
 {
   "label": "Decisões (ADRs)",
-  "position": 2,
+  "position": 5,
   "link": {
     "type": "generated-index",
     "description": "Architectural Decision Records — cada decisão significativa do projeto documentada com contexto, justificativa e alternativas consideradas."

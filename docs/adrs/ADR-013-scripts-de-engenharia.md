@@ -92,7 +92,7 @@ e carrega todos os arquivos `migrations/*.sql` em ordem lexicográfica via `Mojo
 #!/usr/bin/env perl
 # eng/migrate.pl — aplica migrations pendentes ao banco
 
-use v5.38;
+use v5.42;
 use lib 'lib';
 use Mojo::File qw(path);
 use Mojo::Pg;
@@ -121,7 +121,7 @@ say 'Versão atual: ' . $pg->migrations->version;
 #!/usr/bin/env perl
 # eng/seed.pl — popula o banco com dados para desenvolvimento local
 
-use v5.38;
+use v5.42;
 use lib 'lib';
 use Mojo::Pg;
 
@@ -152,10 +152,10 @@ say 'Dados de desenvolvimento inseridos.';
 #!/usr/bin/env perl
 # eng/setup.pl — verifica se o ambiente local está configurado corretamente
 
-use v5.38;
+use v5.42;
 
 my @checks = (
-    [ 'Perl >= 5.38'   => sub { $] >= 5.038 } ],
+    [ 'Perl >= 5.42'   => sub { $] >= 5.042 } ],
     [ 'Carton'         => sub { scalar(`carton --version 2>&1`) && !$? } ],
     [ 'Docker'         => sub { scalar(`docker info 2>&1`)     && !$? } ],
     [ 'POSTGRESQL_URL' => sub { defined $ENV{POSTGRESQL_URL} } ],

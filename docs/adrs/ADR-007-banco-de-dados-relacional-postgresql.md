@@ -60,7 +60,7 @@ PGPASSWORD=secret
 ### Docker Compose para desenvolvimento
 
 O serviço PostgreSQL no Docker Compose define o usuário administrador inicial.
-Em desenvolvimento, esse usuário único é usado para simplificar o setup local.
+Em desenvolvimento, esse usuário único é usado para simplificar a configuração local.
 Em produção, dois usuários com privilégios distintos são provisionados:
 `myapp_migrate` (DDL) e `myapp_app` (DML) — ver ADR-016 para os comandos GRANT
 e a separação de credenciais.

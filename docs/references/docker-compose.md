@@ -9,7 +9,7 @@
 Docker Compose é a ferramenta oficial para definição e execução de ambientes
 multi-container. No stack deste projeto, o ambiente de desenvolvimento local é
 inteiramente definido por um `compose.yml` — banco de dados, message broker, aplicação
-e worker rodam juntos com um único comando. Referência para o guia de setup do
+e worker rodam juntos com um único comando. Referência para o guia de configuração do
 ambiente local.
 
 ## Referenciada em

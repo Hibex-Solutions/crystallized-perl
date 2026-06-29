@@ -5,7 +5,7 @@ const { themes: prismThemes } = require('prism-react-renderer');
 const config = {
   title: 'Crystallized Perl',
   tagline: 'Stack completo e opinativo para serviços de internet modernos em Perl',
-  favicon: undefined,
+  favicon: 'img/logo.svg',
 
   url: 'https://hibex-solutions.github.io',
   baseUrl: '/crystallized-perl/',
@@ -57,6 +57,10 @@ const config = {
         respectPrefersColorScheme: true,
       },
       navbar: {
+        logo: {
+          alt: 'Crystallized Perl',
+          src: 'img/logo.svg',
+        },
         title: 'Crystallized Perl',
         items: [
           {
@@ -76,7 +80,24 @@ const config = {
         style: 'dark',
         links: [
           {
-            title: 'Documentação',
+            title: 'Aprender',
+            items: [
+              {
+                label: 'Primeiros Passos',
+                to: '/getting-started',
+              },
+              {
+                label: 'Guias',
+                to: '/guides',
+              },
+              {
+                label: 'Stack',
+                to: '/stack',
+              },
+            ],
+          },
+          {
+            title: 'Referência',
             items: [
               {
                 label: 'Decisões (ADRs)',

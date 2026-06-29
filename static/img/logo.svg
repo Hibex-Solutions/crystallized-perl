@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img">
+  <title>Crystallized Perl — Raptor Cristalizado</title>
+
+  <!--
+    Logo mark: Raptor Cristalizado — velociraptor low-poly em perfil direito.
+    Paleta: ADR-003 (tokens de cor do sistema dual light/dark).
+    Fundo transparente — funciona em modo claro e escuro.
+    Silhueta dividida em 13 facetas triangulares irradiando do centro.
+    Centro C = (272, 197). Dimensão: 512×512 px viewBox.
+  -->
+
+  <!-- Perimeter vertices (clockwise from back-upper):
+       P1(90,72)   P2(162,47)  P3(396,42)  P4(474,178)  P5(483,223)
+       P6(466,270) P7(395,315) P8(278,330) P9(193,300)  P10(126,380)
+       P11(96,462) P12(66,420) P13(76,127)
+       Center C(272,197)
+  -->
+
+  <!-- Faceta 1: topo-traseiro (Camel Blue histórico) -->
+  <polygon points="272,197 90,72 162,47" fill="#007399" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 2: coroa / topo do crânio (Cyan primário) -->
+  <polygon points="272,197 162,47 396,42" fill="#06B6D4" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 3: fronte superior / cima do bico (Cyan claro — highlight) -->
+  <polygon points="272,197 396,42 474,178" fill="#38BDF8" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 4: ponta do bico superior (quase branco — máximo highlight) -->
+  <polygon points="272,197 474,178 483,223" fill="#BAE6FD" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 5: ponta do bico inferior (Cyan escuro) -->
+  <polygon points="272,197 483,223 466,270" fill="#0E7490" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 6: mandíbula frontal (Roxo tecnológico) -->
+  <polygon points="272,197 466,270 395,315" fill="#8B5CF6" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 7: mandíbula medial (Roxo profundo) -->
+  <polygon points="272,197 395,315 278,330" fill="#6C5CE7" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 8: garganta (Roxo mais escuro) -->
+  <polygon points="272,197 278,330 193,300" fill="#4338CA" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 9: pescoço superior (Slate escuro) -->
+  <polygon points="272,197 193,300 126,380" fill="#334155" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 10: pescoço inferior (Muito escuro) -->
+  <polygon points="272,197 126,380 96,462" fill="#1E293B" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 11: base do pescoço (Mais escuro) -->
+  <polygon points="272,197 96,462 66,420" fill="#0F172A" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 12: traseiro inferior (Muito escuro) -->
+  <polygon points="272,197 66,420 76,127" fill="#1E293B" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Faceta 13: traseiro superior (Cyan médio — conecta ao Faceta 1) -->
+  <polygon points="272,197 76,127 90,72" fill="#0891B2" stroke="#0F172A" stroke-width="1.2"/>
+
+  <!-- Olho: Laranja Raptor — posicionado na faceta 3 (fronte superior) -->
+  <!-- Centróide de C-P3-P4 ≈ (381, 139) -->
+  <circle cx="381" cy="138" r="30" fill="#F97316"/>
+  <circle cx="381" cy="138" r="17" fill="#0F172A"/>
+  <circle cx="374" cy="132" r="6" fill="#FFFFFF" opacity="0.65"/>
+
+  <!-- Borda exterior suave para leitura sobre fundo claro -->
+  <polygon
+    points="90,72 162,47 396,42 474,178 483,223 466,270 395,315 278,330 193,300 126,380 96,462 66,420 76,127"
+    fill="none" stroke="#06B6D4" stroke-width="2.5" opacity="0.35"/>
+</svg>

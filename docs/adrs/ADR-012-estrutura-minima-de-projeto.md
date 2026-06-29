@@ -27,12 +27,12 @@ Todo projeto Crystallized Perl inicia com os seguintes arquivos obrigatórios:
 projeto/
 ├── .gitignore
 ├── .gitattributes
-├── cpanfile              ← inclui 'requires perl, 5.038' como primeira linha
+├── cpanfile              ← inclui 'requires perl, 5.042' como primeira linha
 ├── cpanfile.snapshot     ← gerado pelo Carton, versionado no Git
 ├── Dockerfile
 ├── docker-compose.yml
 ├── README.md             ← instruções mínimas de uso
-├── DEVELOPMENT.md        ← guia detalhado de setup para contribuidores
+├── DEVELOPMENT.md        ← guia detalhado de configuração para contribuidores
 ├── eng/                  ← scripts de engenharia em Perl (ver ADR-013)
 ├── lib/                  ← código da aplicação
 ├── migrations/           ← arquivos SQL de migration (ver ADR-016)
@@ -128,7 +128,7 @@ próprio PowerShell se comportam melhor com CRLF em scripts PowerShell.
 A versão mínima do Perl é declarada como primeira linha do `cpanfile`:
 
 ```perl
-requires 'perl', '5.038';   # versão mínima — ver ADR-005
+requires 'perl', '5.042';   # versão mínima — ver ADR-005
 
 requires 'Mojolicious',              '9.0';
 requires 'Mojo::Pg',                 '4.0';
@@ -153,7 +153,7 @@ Descrição de uma linha.
 ## Pré-requisitos
 
 - Docker e Docker Compose
-- Perl 5.38+ (via perlbrew ou berrybrew — ver DEVELOPMENT.md)
+- Perl 5.42+ (via perlbrew ou berrybrew — ver DEVELOPMENT.md)
 - Carton (`cpanm Carton`)
 
 ## Executando localmente
@@ -205,7 +205,7 @@ mínima obrigatória:
 
 ## 1. Visão geral do ambiente
 
-Este projeto usa Perl 5.38+ gerenciado localmente (sem depender do Perl do sistema
+Este projeto usa Perl 5.42+ gerenciado localmente (sem depender do Perl do sistema
 operacional). As dependências são gerenciadas pelo Carton. Os serviços de apoio
 (PostgreSQL, RabbitMQ) rodam via Docker Compose.
 
@@ -218,8 +218,8 @@ Consulte a documentação oficial: https://perlbrew.pl/
 ```bash
 \curl -L https://install.perlbrew.pl | bash
 source ~/perl5/perlbrew/etc/bashrc  # adicionar ao .bashrc/.zshrc
-perlbrew install perl-5.38.2
-perlbrew switch perl-5.38.2
+perlbrew install perl-5.42.2
+perlbrew switch perl-5.42.2
 ```
 
 **Windows — berrybrew**
@@ -227,8 +227,8 @@ perlbrew switch perl-5.38.2
 Consulte a documentação oficial: https://github.com/dnmfarrell/berrybrew
 
 ```powershell
-berrybrew install 5.38.2_64
-berrybrew switch 5.38.2_64
+berrybrew install 5.42.2_64
+berrybrew switch 5.42.2_64
 ```
 
 ## 3. Instalando as dependências do projeto
@@ -309,7 +309,7 @@ Referências: [github/gitignore](../references/github-gitignore.md),
 |-------------|-------------------|
 | **Sem .gitattributes** | Desenvolvedor Windows gera CRLF silenciosamente; scripts falham dentro de containers Linux sem mensagem clara de erro |
 | **Versão do Perl apenas em documentação** | Texto de documentação envelhece sem alerta; `cpanfile` é verificado pelo Carton automaticamente |
-| **Um único README.md com todo o conteúdo** | README longo afasta visitantes do repositório; DEVELOPMENT.md mantém onboarding detalhado separado do overview público |
+| **Um único README.md com todo o conteúdo** | README longo afasta visitantes do repositório; DEVELOPMENT.md mantém a integração detalhada de contribuidores separada do panorama público |
 | **Makefile para tarefas auxiliares** | Requer Make instalado (ausente por padrão no Windows); não aproveita o conhecimento Perl da equipe |
 
 ## Consequências

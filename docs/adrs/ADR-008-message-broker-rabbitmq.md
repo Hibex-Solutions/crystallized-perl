@@ -140,7 +140,7 @@ sub create {
 ```perl
 #!/usr/bin/env perl
 # script/worker.pl
-use v5.38;    # habilita strict e warnings automaticamente
+use v5.42;    # habilita strict e warnings automaticamente
 
 use lib 'lib';
 use Net::AMQP::RabbitMQ;

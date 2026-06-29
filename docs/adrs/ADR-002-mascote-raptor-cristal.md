@@ -106,7 +106,7 @@ Colors (head to tail gradient): Deep teal-blue (#007399) on head, neck, upper sp
 vibrant orange (#F97316) on torso and ribs → violet-purple (#8B5CF6) on lower belly,
 legs, tail. Bright cyan (#06B6D4) luminescent neon glow on all facet edges.
 
-Embedded code: Faint but readable modern Perl 5.38+ code fragments etched on key
+Embedded code: Faint but readable modern Perl 5.42+ code fragments etched on key
 body facets in white monospaced font — "$self->new()", "use strict;", "use warnings;",
 "return $self;", "my $data = {}".
 
@@ -216,7 +216,7 @@ Colors (head to tail gradient): Deep teal-blue (#007399) on head and neck → vi
 orange (#F97316) on torso and mid-back → violet-purple (#8B5CF6) on lower body, legs,
 tail tip. Bright cyan (#06B6D4) luminescent neon edges on all facet boundaries.
 
-Embedded code: Different Perl 5.38+ code fragments visible on key body facets in white
+Embedded code: Different Perl 5.42+ code fragments visible on key body facets in white
 monospaced font — "use Moo;", "sub BUILD {}", "$self->run()", "my @items = ()",
 "use modern::perl".
 

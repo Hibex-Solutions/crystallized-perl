@@ -5,7 +5,7 @@
 
 ## Contexto
 
-Desenvolvedores precisam de uma versão específica de Perl (mínimo 5.38) instalada
+Desenvolvedores precisam de uma versão específica de Perl (5.42) instalada
 localmente sem interferir no Perl do sistema operacional — que frequentemente está
 desatualizado, é gerenciado pelo SO e não deve ser modificado. A equipe pode trabalhar
 em Linux, macOS e Windows, e cada plataforma tem seu próprio mecanismo de gerenciamento
@@ -61,8 +61,8 @@ Referências: [Perlbrew](../references/perlbrew.md),
 source ~/perl5/perlbrew/etc/bashrc
 
 # Instalar o Perl na versão mínima do stack
-perlbrew install perl-5.38.2
-perlbrew switch perl-5.38.2
+perlbrew install perl-5.42.2
+perlbrew switch perl-5.42.2
 
 # Verificar
 perl -v
@@ -82,10 +82,10 @@ cpanm Carton
 berrybrew available
 
 # Instalar a versão escolhida
-berrybrew install 5.38.2_64
+berrybrew install 5.42.2_64
 
 # Ativar
-berrybrew switch 5.38.2_64
+berrybrew switch 5.42.2_64
 
 # Verificar
 perl -v
@@ -178,6 +178,6 @@ E adicionar ao repositório um `.gitattributes`:
   configurado com o compilador C do MinGW
 
 **Ações necessárias**:
-- Criar guia de setup do ambiente local (Guia 1 da trilha de documentação)
-- Documentar a versão mínima de Perl (`requires 'perl', '5.038'` no `cpanfile`)
+- Criar guia de configuração do ambiente local (Guia 1 da trilha de documentação)
+- Documentar a versão mínima de Perl (`requires 'perl', '5.042'` no `cpanfile`)
 - Incluir `.gitattributes` no repositório para garantir LF em todos os SO
