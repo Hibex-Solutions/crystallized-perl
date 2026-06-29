@@ -96,11 +96,20 @@ source ~/.bashrc   # ou source ~/.zshrc
 ### 4. Instalar Perl 5.42.2
 
 ```bash
-perlbrew install perl-5.42.2
+perlbrew --notest install perl-5.42.2
 perlbrew switch perl-5.42.2
 ```
 
 A instalação compila Perl a partir do código-fonte — leva alguns minutos.
+
+:::info Por que `--notest`?
+Por padrão o perlbrew executa o conjunto de testes do próprio interpretador Perl
+após a compilação. Esses testes verificam o interpretador, não o seu código, e
+frequentemente falham em instalações Linux mínimas por fatores do ambiente
+(locales não configurados, bibliotecas opcionais ausentes). O binário compilado
+é funcional mesmo quando alguns testes falham — `--notest` apenas pula essa etapa.
+Para um ambiente de desenvolvimento, isso é adequado.
+:::
 
 Verifique:
 
@@ -359,6 +368,7 @@ docker compose down -v
 | `Connection refused` ao banco | PostgreSQL ainda iniciando | Aguarde `docker compose ps` mostrar `(healthy)` |
 | Scripts falham com `\r not found` | CRLF no Windows | `git config --global core.autocrlf false` e re-clone |
 | `I can't find make or gmake` | Ferramentas de compilação ausentes no Linux | `sudo apt-get install -y build-essential` (Ubuntu/Debian) |
+| `perlbrew install` falha em testes | Suite de testes do interpretador falha por fatores do ambiente | Use `perlbrew --notest install perl-5.42.2` |
 | `DBD::Pg` falha ao instalar | Compilador C ausente | Use berrybrew (já inclui MinGW) ou Docker Compose |
 | Keycloak lento para iniciar | Primeira inicialização | Normal — aguarde ~45 segundos |
 

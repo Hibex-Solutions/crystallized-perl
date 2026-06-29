@@ -61,7 +61,8 @@ Referências: [Perlbrew](../references/perlbrew.md),
 source ~/perl5/perlbrew/etc/bashrc
 
 # Instalar o Perl na versão mínima do stack
-perlbrew install perl-5.42.2
+# --notest pula o suite de testes do interpretador (adequado para dev)
+perlbrew --notest install perl-5.42.2
 perlbrew switch perl-5.42.2
 
 # Verificar

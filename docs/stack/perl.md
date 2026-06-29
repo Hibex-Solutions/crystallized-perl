@@ -64,6 +64,43 @@ Nunca use `use strict; use warnings` manualmente em módulos do stack — é red
 use Mojo::Base -strict;   # ativa strict + warnings + utf8 em uma linha
 ```
 
+Utilitários `eng/` que não usam Mojolicious usam `use v5.42;` diretamente:
+
+```perl
+#!/usr/bin/env perl
+use v5.42;   # ativa strict, warnings, utf8 e todos os features até 5.42
+```
+
+### Arquivos de teste (`.t`)
+
+```perl
+# t/api/tickets.t
+use v5.42;
+use Test::More;
+use Test::Mojo;
+```
+
+`use v5.42;` ativa strict e warnings — `use strict; use warnings;` em arquivos `.t`
+é redundante com Perl 5.42+ como mínimo.
+
+### `class` nativo — quando usar
+
+O `class` do Perl 5.42+ (estável desde 5.40) substitui Moo **somente** quando o tipo
+não precisa de roles, lazy builders, coerce nem triggers:
+
+```perl
+use v5.42;
+
+class Stega::DTO::TicketSummary {
+    field $id       :param :reader;
+    field $title    :param :reader;
+    field $status   :param :reader = 'open';
+}
+```
+
+Se o tipo precisar de `with 'SomeRole'`, use Moo. O `class` nativo ainda não tem
+suporte a roles — esse é o critério de decisão.
+
 ### Proibições explícitas
 
 | Padrão proibido | Alternativa moderna |
@@ -73,6 +110,7 @@ use Mojo::Base -strict;   # ativa strict + warnings + utf8 em uma linha
 | `open(FILE, ">arquivo")` | `open(my $fh, '>', 'arquivo')` |
 | `$_` em tutoriais como "simplificação" | variável nomeada explícita |
 | `use 5.010` (versão antiga) | `use v5.42` ou `requires 'perl', '5.042'` |
+| `use strict; use warnings` em `.t` | `use v5.42` (já ativa ambos desde 5.36) |
 | `our @EXPORT` com `Exporter` | Funções via `Moo` ou sem exportação |
 
 ---
@@ -82,7 +120,7 @@ use Mojo::Base -strict;   # ativa strict + warnings + utf8 em uma linha
 ### Linux / macOS — perlbrew
 
 ```bash
-perlbrew install perl-5.42.2
+perlbrew --notest install perl-5.42.2
 perlbrew switch perl-5.42.2
 perl -v   # confirma: version 42, subversion 2
 ```

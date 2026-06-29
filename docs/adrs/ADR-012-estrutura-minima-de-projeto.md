@@ -218,7 +218,7 @@ Consulte a documentação oficial: https://perlbrew.pl/
 ```bash
 \curl -L https://install.perlbrew.pl | bash
 source ~/perl5/perlbrew/etc/bashrc  # adicionar ao .bashrc/.zshrc
-perlbrew install perl-5.42.2
+perlbrew --notest install perl-5.42.2
 perlbrew switch perl-5.42.2
 ```
 

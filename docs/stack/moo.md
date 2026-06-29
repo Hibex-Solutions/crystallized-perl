@@ -24,7 +24,7 @@ transparente — basta trocar `use Moo` por `use Moose`.
 
 ---
 
-## Onde usar Moo vs. Mojo::Base
+## Onde usar Moo, Mojo::Base e `class`
 
 | Tipo de objeto | Sistema | Módulo base |
 |---------------|---------|-------------|
@@ -33,6 +33,52 @@ transparente — basta trocar `use Moo` por `use Moose`.
 | Modelos de domínio | `Moo` | `use Moo` |
 | Serviços e integrações | `Moo` | `use Moo` |
 | Roles (comportamentos) | `Moo::Role` | `use Moo::Role` |
+| Value objects simples (sem roles) | `class` nativo | `use v5.42; class Foo { ... }` |
+
+**A regra de ouro:** se o tipo precisa de um Role, use Moo. Se não precisa de Role,
+nem de atributos com `lazy`, `coerce` ou `trigger`, o `class` nativo é a escolha
+mais idiomática em Perl 5.42+.
+
+### `class` nativo vs Moo — comparação prática
+
+```perl
+# Value object com class nativo (sem roles, sem coerce, sem lazy)
+use v5.42;
+
+class Stega::DTO::TicketSummary {
+    field $id       :param :reader;
+    field $title    :param :reader;
+    field $status   :param :reader = 'open';
+    field $priority :param :reader = 'medium';
+}
+
+# Uso idêntico ao Moo:
+my $dto = Stega::DTO::TicketSummary->new(id => 1, title => 'Erro no login');
+say $dto->status;   # 'open'
+```
+
+```perl
+# Modelo de domínio com Moo (precisa de Role, lazy e validação)
+package Stega::Model::Ticket;
+use Moo;
+with 'Stega::Role::HasTimestamps';   # roles — aqui class não funciona
+with 'Stega::Role::HasAuditLog';
+use namespace::clean;
+
+has 'priority' => (
+    is  => 'ro',
+    isa => sub { die "inválida\n" unless $_[0] =~ /^(low|medium|high|critical)$/ },
+    default => 'medium',
+);
+
+has 'display_name' => (
+    is      => 'ro',
+    lazy    => 1,          # lazy — class nativo não suporta
+    builder => '_build_display_name',
+);
+
+1;
+```
 
 ---
 

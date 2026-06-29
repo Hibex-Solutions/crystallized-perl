@@ -51,8 +51,7 @@ t/
 
 ```perl
 # t/unit/model/ticket.t
-use strict;
-use warnings;
+use v5.42;
 use Test::More;
 
 use Stega::Model::Ticket;
@@ -95,8 +94,7 @@ done_testing;
 
 ```perl
 # t/api/tickets.t
-use strict;
-use warnings;
+use v5.42;
 use Test::More;
 use Test::Mojo;
 
@@ -155,8 +153,7 @@ done_testing;
 
 ```perl
 # t/integration/worker.t
-use strict;
-use warnings;
+use v5.42;
 use Test::More;
 use Test::MockObject;
 

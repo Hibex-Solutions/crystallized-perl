@@ -65,8 +65,7 @@ t/
 
 ```perl
 # t/unit/model/user.t
-use strict;
-use warnings;
+use v5.42;
 use Test::More;
 
 use MyApp::Model::User;
@@ -105,8 +104,7 @@ done_testing;
 
 ```perl
 # t/api/users.t
-use strict;
-use warnings;
+use v5.42;
 use Test::More;
 use Test::Mojo;
 
@@ -151,8 +149,7 @@ done_testing;
 
 ```perl
 # t/unit/service/order.t
-use strict;
-use warnings;
+use v5.42;
 use Test::More;
 use Test::MockObject;
 

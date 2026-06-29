@@ -17,9 +17,13 @@ Docker (módulos XS exigem compilador C no estágio de build).
 
 ## Decisão
 
-**Moo** como sistema de OO para todos os objetos de domínio (modelos, serviços,
-repositórios, value objects). Controladores Mojolicious continuam usando `Mojo::Base`
-(padrão nativo do Mojolicious, que já herda as conveniências necessárias).
+**Moo** como sistema de OO para modelos de domínio, serviços e repositórios.
+Controladores Mojolicious continuam usando `Mojo::Base` (padrão nativo do Mojolicious).
+
+Para **value objects simples sem roles** (DTOs, estruturas de resposta, wrappers sem
+comportamento compartilhado), o `class` nativo do Perl 5.42+ é uma alternativa válida
+e preferível quando não há dependência de `Moo::Role`. A escolha é guiada pela
+necessidade de roles: onde há roles, Moo; onde não há, `class` é mais idiomático.
 
 ## Justificativa
 
@@ -150,11 +154,13 @@ sub show {
 | Serviços e integrações | `use Moo` |
 | Roles (comportamentos) | `use Moo::Role` |
 | Classe principal da app | `use Mojo::Base 'Mojolicious'` |
+| Value objects simples (sem roles) | `use v5.42; class Foo { ... }` |
 
 ## Alternativas Consideradas
 
-| Alternativa | Motivo da rejeição |
-|-------------|-------------------|
+| Alternativa | Observação |
+|-------------|-----------|
+| **`class` nativo (Perl 5.42+)** | Estável desde 5.40, sem dependências CPAN. **Adotado parcialmente**: válido para value objects simples sem roles. **Bloqueador para uso geral**: não há suporte nativo a roles — e a Stega usa roles extensivamente (`HasTimestamps`, `HasAuditLog`). Previsto para revisão quando o suporte a roles chegar na linguagem |
 | **Moose** | Pesado (múltiplas deps XS), startup mais lento — impacta negativamente o boot de containers; vantagens de introspecção avançada não são necessárias para o escopo atual |
 | **OO manual (`bless`)** | Verboso, propenso a boilerplate inconsistente entre classes, sem Roles, sem construtores automáticos — inadequado para um projeto com múltiplos modelos de domínio |
 | **Class::Tiny** | Muito minimalista: sem suporte a Roles, sem validação de atributos, sem `isa` — insuficiente para o nível de organização exigido pelo stack |
