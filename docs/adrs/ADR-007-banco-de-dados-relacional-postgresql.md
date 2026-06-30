@@ -68,7 +68,7 @@ e a separação de credenciais.
 ```yaml
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB:       myapp
       POSTGRES_USER:     myapp_user
@@ -91,7 +91,7 @@ volumes:
 
 PostgreSQL 14 ou superior — versão mínima que suporta todos os operadores JSONB,
 `GENERATED ALWAYS AS` e melhorias de performance no planner usados nos guias.
-Recomendado: PostgreSQL 16 (imagem `postgres:16-alpine` para containers leves).
+Recomendado: PostgreSQL 17 (imagem `postgres:17-alpine` para containers leves).
 
 ## Alternativas Consideradas
 

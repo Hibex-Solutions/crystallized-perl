@@ -64,12 +64,18 @@ Worker → Authorization: Bearer <token> na chamada à API
 ### Configuração via variáveis de ambiente
 
 ```bash
+# URL usada pelo servidor para chamadas servidor→servidor ao Keycloak
+# (troca de código por token, busca de chave pública via JWKS)
 KEYCLOAK_URL=https://auth.example.com
+
+# URL do Keycloak visível pelo browser (redirects de login e logout).
+# Necessária quando KEYCLOAK_URL aponta para um hostname interno (ex: Docker networking)
+# que o browser não consegue resolver. Se omitida, usa KEYCLOAK_URL.
+KEYCLOAK_FRONTEND_URL=https://auth.example.com
+
 KEYCLOAK_REALM=myapp
 KEYCLOAK_CLIENT_ID=myapp-api
-KEYCLOAK_CLIENT_SECRET=secret  # apenas para workers/M2M
-JWT_ISSUER=https://auth.example.com/realms/myapp
-JWT_AUDIENCE=myapp-api
+KEYCLOAK_CLIENT_SECRET=secret  # apenas para workers/M2M com client confidencial
 ```
 
 ### Carregamento do JWKS no startup
@@ -214,18 +220,36 @@ my $result = $ua->get(
 
 ### Docker Compose: Keycloak em desenvolvimento
 
+O Keycloak em desenvolvimento usa o mesmo PostgreSQL da aplicação (database
+separada `keycloak`). Um script de inicialização cria a database automaticamente:
+
+```sql
+-- docker/postgres-init/01-keycloak-db.sql
+CREATE DATABASE keycloak;
+```
+
 ```yaml
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0
+    image: quay.io/keycloak/keycloak:26.6
     command: start-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      KC_DB:            dev-file
-      KEYCLOAK_ADMIN:   admin
+      KC_DB:               postgres
+      KC_DB_URL:           jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME:      myapp_user
+      KC_DB_PASSWORD:      dev_password
+      KEYCLOAK_ADMIN:      admin
       KEYCLOAK_ADMIN_PASSWORD: admin
     ports:
       - "8080:8080"
 ```
+
+Usar PostgreSQL como backend do Keycloak em desenvolvimento garante que a
+configuração do realm (clients, roles, usuários) **persiste entre restarts**
+do container, eliminando a necessidade de reconfiguração a cada `docker compose up`.
 
 ## Alternativas Consideradas
 

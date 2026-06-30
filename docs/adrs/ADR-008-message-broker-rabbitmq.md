@@ -29,11 +29,27 @@ letter queues para tratamento de falhas.
 
 O modelo de uso no stack é assimétrico por design:
 
-- **Publicação (API)**: a rota Mojolicious publica uma mensagem e retorna HTTP 202.
-  Usa `Mojo::RabbitMQ::Client` para não bloquear o event loop.
-- **Consumo (Worker)**: um processo Perl dedicado roda em loop contínuo consumindo
-  mensagens. Usa `Net::AMQP::RabbitMQ` (síncrono, adequado para um processo que não
-  serve HTTP).
+- **Publicação (API)**: a rota Mojolicious enfileira um job no **Minion** (backend
+  PostgreSQL) e retorna imediatamente. O job Minion é executado pelo worker Minion
+  e publica a mensagem no RabbitMQ via `Net::AMQP::RabbitMQ`. Esta indireção garante
+  que a publicação seja durável mesmo que o RabbitMQ esteja temporariamente
+  indisponível — o job permanece na fila Minion até que possa ser processado.
+- **Consumo (NotificationWorker)**: um processo Perl dedicado roda em loop contínuo
+  consumindo mensagens do RabbitMQ. Usa `Net::AMQP::RabbitMQ` (síncrono, adequado
+  para um processo que não serve HTTP).
+
+```
+HTTP Handler → minion->enqueue('job_name', [...])
+                  ↓  (PostgreSQL Minion queue)
+           Minion Worker → Net::AMQP::RabbitMQ → RabbitMQ Exchange
+                                                        ↓
+                                            NotificationWorker (consumidor)
+```
+
+**Nota sobre publicação direta**: em casos onde a latência de enfileiramento Minion
+é inaceitável e a disponibilidade do RabbitMQ é garantida, é possível publicar
+diretamente com `Mojo::RabbitMQ::Client` (não-bloqueante) no handler HTTP. Essa
+abordagem elimina a etapa Minion mas perde a durabilidade da fila intermediária.
 
 Workers são containers separados no Kubernetes: mesmo Deployment, mesma imagem Docker
 da API, apenas o `command` é diferente (aponta para o script do worker em vez do
@@ -55,7 +71,7 @@ Referências: [RabbitMQ](../references/rabbitmq.md),
 ```yaml
 services:
   rabbitmq:
-    image: rabbitmq:3.13-management-alpine
+    image: rabbitmq:4.3-management
     environment:
       RABBITMQ_DEFAULT_USER: myapp
       RABBITMQ_DEFAULT_PASS: dev_password
