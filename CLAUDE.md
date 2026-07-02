@@ -346,7 +346,7 @@ Todas as decisões de stack estão registradas nas ADRs. Consulte a seção
 | Framework web | Mojolicious + Hypnotoad (ADR-004) |
 | Dependências | Carton + cpanm (ADR-005) |
 | Orientação a objetos | Moo + Moo::Role (ADR-006) |
-| Banco de dados | PostgreSQL 16 (ADR-007) |
+| Banco de dados | PostgreSQL 17 (ADR-007) |
 | Acesso relacional | Mojo::Pg + Mojo::Pg::Migrations (ADR-016) |
 | Dados documentais | PostgreSQL JSONB via Mojo::Pg (ADR-017) |
 | Message broker | RabbitMQ via AMQP 0-9-1 (ADR-008) |
@@ -420,7 +420,7 @@ Todas as questões de fundação estão respondidas. As decisões estão registr
 | Framework web | Mojolicious + Hypnotoad | ADR-004 |
 | Gerenciamento de dependências | Carton + cpanm | ADR-005 |
 | Sistema de OO | Moo + Moo::Role | ADR-006 |
-| Banco de dados | PostgreSQL 16 | ADR-007 |
+| Banco de dados | PostgreSQL 17 | ADR-007 |
 | Message broker | RabbitMQ (AMQP 0-9-1) | ADR-008 |
 | Autenticação | Keycloak + JWT (Crypt::JWT) | ADR-009 |
 | Orquestração | Kubernetes | ADR-010 |

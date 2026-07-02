@@ -1,11 +1,11 @@
 ---
 sidebar_position: 5
-title: PostgreSQL 16
+title: PostgreSQL 17
 ---
 
-# PostgreSQL 16
+# PostgreSQL 17
 
-> **Decisão**: PostgreSQL 16 como banco de dados único para dados relacionais
+> **Decisão**: PostgreSQL 17 como banco de dados único para dados relacionais
 > e documentais (JSONB).
 > [ADR-007 — Banco de Dados Relacional PostgreSQL](/adrs/ADR-007-banco-de-dados-relacional-postgresql) ·
 > [ADR-017 — Dados Documentais JSONB](/adrs/ADR-017-acesso-a-dados-documentos-jsonb)
@@ -32,7 +32,7 @@ sem sincronização de índice, sem latência extra.
 # compose.yml
 services:
   postgres:
-    image: postgres:16
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB:       stega
       POSTGRES_USER:     stega_migrate   # usuário DDL (migrations)

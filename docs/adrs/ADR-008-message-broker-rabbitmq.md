@@ -267,7 +267,7 @@ spec:
 
 **Ações necessárias**:
 - Adicionar serviço `rabbitmq` ao Docker Compose com healthcheck
-- Declarar `Mojo::RabbitMQ::Client` e `Net::AMQP::RabbitMQ` no `cpanfile`
+- Declarar `Net::AMQP::RabbitMQ` no `cpanfile` (usado tanto no worker consumidor quanto nos jobs Minion que publicam mensagens)
 - Expor `RABBITMQ_HOST`, `RABBITMQ_USER` e `RABBITMQ_PASSWORD` como variáveis de ambiente (Secret no Kubernetes)
 - Criar Deployment separado para os workers no Kubernetes
 - Configurar dead letter queue para mensagens rejeitadas

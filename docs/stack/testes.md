@@ -241,7 +241,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17-alpine
         env:
           POSTGRES_DB:       stega_test
           POSTGRES_USER:     stega_migrate

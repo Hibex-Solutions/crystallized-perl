@@ -62,16 +62,16 @@ Ver [`docs/references/`](docs/references/) para as 36 fontes completas.
 
 | Camada | Tecnologia | ADR |
 |--------|-----------|-----|
-| Linguagem | Perl 5.38+ | [ADR-005](docs/adrs/ADR-005-gerenciamento-de-dependencias.md) |
+| Linguagem | Perl 5.42+ | [ADR-005](docs/adrs/ADR-005-gerenciamento-de-dependencias.md) |
 | Framework web | Mojolicious + Hypnotoad | [ADR-004](docs/adrs/ADR-004-framework-web-mojolicious.md) |
 | Dependências | Carton + cpanm | [ADR-005](docs/adrs/ADR-005-gerenciamento-de-dependencias.md) |
 | Orientação a objetos | Moo + Moo::Role | [ADR-006](docs/adrs/ADR-006-sistema-de-oo-moo.md) |
-| Banco de dados | PostgreSQL 16 | [ADR-007](docs/adrs/ADR-007-banco-de-dados-relacional-postgresql.md) |
+| Banco de dados | PostgreSQL 17 | [ADR-007](docs/adrs/ADR-007-banco-de-dados-relacional-postgresql.md) |
 | Acesso relacional | Mojo::Pg + Mojo::Pg::Migrations | [ADR-016](docs/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg.md) |
 | Dados documentais | PostgreSQL JSONB | [ADR-017](docs/adrs/ADR-017-acesso-a-dados-documentos-jsonb.md) |
 | Message broker | RabbitMQ (AMQP 0-9-1) | [ADR-008](docs/adrs/ADR-008-message-broker-rabbitmq.md) |
 | Autenticação | Keycloak + JWT / Crypt::JWT | [ADR-009](docs/adrs/ADR-009-autenticacao-keycloak-jwt.md) |
-| Contrato de API | OpenAPI v3 + Mojolicious::Plugin::OpenAPI | [ADR-015](docs/adrs/ADR-015-contrato-de-api-openapi-v3.md) |
+| Contrato de API | OpenAPI v3 (documentação) | [ADR-015](docs/adrs/ADR-015-contrato-de-api-openapi-v3.md) |
 | Testes | Test::Mojo + prove + Devel::Cover | [ADR-011](docs/adrs/ADR-011-estrategia-de-testes.md) |
 | Containerização | Docker multi-stage build | [ADR-005](docs/adrs/ADR-005-gerenciamento-de-dependencias.md) |
 | Orquestração | Kubernetes + InitContainer | [ADR-010](docs/adrs/ADR-010-orquestracao-kubernetes.md) |

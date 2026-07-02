@@ -15,4 +15,4 @@ compatível com todos os ORMs e clientes Perl relevantes.
 - ADR-007: Banco de Dados Relacional — PostgreSQL
 - ADR-016: Acesso a Dados Relacional — Mojo::Pg e Migrations
 - ADR-017: Acesso a Dados de Documentos — PostgreSQL JSONB
-- ADR-018: Aplicação de Demonstração — Pluma
+- ADR-018: Aplicação de Demonstração — Stega

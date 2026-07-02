@@ -78,9 +78,18 @@ agentes e resolver problemas com trilha de auditoria completa.
 | `agent` | Atende tickets, adiciona comentários internos, muda status | Keycloak |
 | `admin` | Gerencia produtos, usuários e regras de SLA | Keycloak |
 
-O papel do usuário é declarado como atributo no Keycloak e incluído no JWT como
-claim `role`. O middleware de autenticação da Stega lê `$c->stash('jwt_claims')->{role}`
-para aplicar controle de acesso em cada rota.
+O papel do usuário é lido a partir do access token do Keycloak — não do id_token.
+O access token carrega o campo `realm_access.roles` (padrão Keycloak) ou a claim
+simplificada `role` para tokens HS256 de teste. O middleware de autenticação
+(`Stega::Controller::Auth::require_jwt`) extrai o papel com:
+
+```perl
+my $role = $claims->{role}
+    // do {
+        my $roles = ($claims->{realm_access} // {})->{roles} // [];
+        (grep { /^(admin|agent|customer)$/ } @$roles)[0] // 'customer'
+    };
+```
 
 ### Entidades do domínio
 
@@ -104,7 +113,7 @@ Cada arquivo de migration usa a notação `-- N up` / `-- N down` do `Mojo::Pg`.
 CREATE TABLE users (
     id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     keycloak_id  TEXT         NOT NULL UNIQUE,
-    email        TEXT         NOT NULL UNIQUE,
+    email        TEXT         NOT NULL UNIQUE,  -- UNIQUE removido pela migration 008
     display_name TEXT         NOT NULL,
     avatar_url   TEXT,
     role         TEXT         NOT NULL DEFAULT 'customer',
@@ -114,6 +123,11 @@ CREATE TABLE users (
 -- 1 down
 DROP TABLE users;
 ```
+
+> **Atenção**: a migration `008_relax_user_email_unique.sql` remove a constraint `UNIQUE`
+> do campo `email`, pois o identificador primário de usuário é `keycloak_id`. O e-mail
+> pode mudar no Keycloak e dois ambientes de teste podem ter JWTs com o mesmo e-mail
+> mas `keycloak_id`s distintos.
 
 ```sql
 -- migrations/002_create_products.sql
@@ -125,7 +139,8 @@ CREATE TABLE products (
     description TEXT,
     settings    JSONB,
     -- settings: {"sla_hours": {"critical": 4, "high": 8, "medium": 24},
-    --             "webhook_url": "https://...", "slack_channel": "#suporte"}
+    --             "webhook_url": "https://...", "slack_channel": "#suporte",
+    --             "github_repo": "org/repo"}
     is_active   BOOLEAN      NOT NULL DEFAULT true,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
@@ -225,8 +240,8 @@ CREATE TABLE events (
     actor_id    UUID         REFERENCES users(id),
     type        TEXT         NOT NULL,
     -- type: 'ticket.created' | 'status.changed' | 'priority.changed' |
-    --        'assigned' | 'comment.added' | 'resolved'
-    payload     JSONB        NOT NULL,
+    --        'assigned' | 'comment.added' | 'resolved' | 'ticket.sla_breached'
+    payload     JSONB        NOT NULL DEFAULT '{}',
     -- payload: {"old_status": "open", "new_status": "in_progress",
     --            "assigned_to": "uuid", "reason": "..."}
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
@@ -238,6 +253,18 @@ CREATE INDEX ON events USING GIN (payload);
 
 -- 6 down
 DROP TABLE events;
+```
+
+```sql
+-- migrations/008_relax_user_email_unique.sql
+-- 8 up
+-- Email não é identificador primário; keycloak_id é a chave.
+-- A constraint UNIQUE em email impede upserts legítimos quando dois JWTs
+-- têm o mesmo email mas keycloak_ids distintos (e.g., ambientes de teste).
+ALTER TABLE users DROP CONSTRAINT users_email_key;
+
+-- 8 down
+ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
 ```
 
 ```sql
@@ -395,26 +422,42 @@ canais externos (e-mail, Slack, webhooks de saída). Usa `Net::AMQP::RabbitMQ`
 package Stega::Worker::NotificationWorker;
 use strict;
 use warnings;
+use feature 'say';
 use Net::AMQP::RabbitMQ;
 use JSON::PP qw(decode_json);
 
 sub run {
     my $mq = Net::AMQP::RabbitMQ->new;
-    $mq->connect($ENV{RABBITMQ_HOST} // 'localhost', {
-        user     => $ENV{RABBITMQ_USER}     // 'stega',
-        password => $ENV{RABBITMQ_PASSWORD} // 'dev_password',
-        vhost    => '/',
-    });
+    $mq->connect(
+        $ENV{RABBITMQ_HOST} // 'localhost',
+        {
+            user     => $ENV{RABBITMQ_USER}     // 'stega',
+            password => $ENV{RABBITMQ_PASSWORD} // 'dev_password',
+            vhost    => $ENV{RABBITMQ_VHOST}    // '/',
+            port     => $ENV{RABBITMQ_PORT}     // 5672,
+        }
+    );
 
     $mq->channel_open(1);
-    $mq->exchange_declare(1, 'stega.notifications', { exchange_type => 'topic' });
-    $mq->queue_declare(1, 'notifications');
-    $mq->queue_bind(1, 'notifications', 'stega.notifications', 'ticket.#');
-    $mq->consume(1, 'notifications');
+    $mq->exchange_declare(1, 'stega.notifications', { exchange_type => 'topic', durable => 1 });
+    $mq->queue_declare(1, 'stega.notifications.dispatch', { durable => 1 });
+    $mq->queue_bind(1, 'stega.notifications.dispatch', 'stega.notifications', 'ticket.#');
+    $mq->queue_bind(1, 'stega.notifications.dispatch', 'stega.notifications', 'report.#');
+    $mq->consume(1, 'stega.notifications.dispatch');
 
-    while (my $msg = $mq->recv) {
-        my $payload = decode_json($msg->{body});
-        _dispatch($payload);
+    say '[NotificationWorker] Aguardando mensagens. Ctrl+C para encerrar.';
+
+    while (my $msg = $mq->recv(0)) {   # 0 = bloqueante
+        eval {
+            my $payload     = decode_json($msg->{body});
+            my $routing_key = $msg->{routing_key} // '';
+            _dispatch($routing_key, $payload);
+            $mq->ack(1, $msg->{delivery_tag});
+        };
+        if ($@) {
+            warn "[NotificationWorker] Erro: $@\n";
+            $mq->reject(1, $msg->{delivery_tag}, 0);
+        }
     }
 }
 ```
@@ -451,8 +494,8 @@ Isso garante que o GitHub ou sistema externo não aguarde o processamento comple
 | ADR-004 | Mojolicious + Hypnotoad | Framework principal; `Stega.pm`; frontend server-rendered + API no mesmo processo |
 | ADR-005 | Carton + cpanm | `cpanfile` com todas as dependências fixadas; `carton exec` em todos os comandos |
 | ADR-006 | Moo + Moo::Role | `Stega::Model::Ticket`, `::Comment`, `::Product`, `::User` — lógica de domínio isolada dos controllers |
-| ADR-007 | PostgreSQL 16 | Banco único; 7 migrations; dois usuários (DDL e DML) em produção |
-| ADR-008 | RabbitMQ | Exchange `stega.notifications`; `NotificationWorker` com `Net::AMQP::RabbitMQ`; publicação via `Mojo::RabbitMQ::Client` |
+| ADR-007 | PostgreSQL 17 | Banco único; 8 migrations; dois usuários (DDL e DML) em produção |
+| ADR-008 | RabbitMQ | Exchange `stega.notifications` (topic, durable); fila `stega.notifications.dispatch`; `NotificationWorker` consome com `Net::AMQP::RabbitMQ`; jobs Minion publicam também via `Net::AMQP::RabbitMQ` (conexão por chamada) |
 | ADR-009 | Keycloak + JWT | Login OIDC (web); JWT Bearer (API); sincronização de usuário no callback; claim `role` para RBAC |
 | ADR-010 | Kubernetes | Três Deployments: `stega-api`, `stega-minion-worker`, `stega-notification-worker`; InitContainer para migration |
 | ADR-011 | Test::Mojo + prove + Devel::Cover | Suite de testes cobrindo todas as rotas da API; testes de autenticação com JWT falso |
@@ -460,23 +503,26 @@ Isso garante que o GitHub ou sistema externo não aguarde o processamento comple
 | ADR-013 | Scripts de engenharia | `eng/migrate.pl`, `eng/seed.pl`, `eng/setup.pl`, `eng/worker.pl` |
 | ADR-014 | Ambiente de desenvolvimento | `compose.yml` com PostgreSQL, RabbitMQ, Keycloak, Minion worker e Notification worker |
 | ADR-015 | OpenAPI v3 | `api/stega.yaml` — contrato completo de todas as rotas `/api/v1/...` |
-| ADR-016 | Mojo::Pg + migrations | Toda persistência relacional; 7 arquivos em `migrations/`; dois usuários PostgreSQL |
+| ADR-016 | Mojo::Pg + migrations | Toda persistência relacional; 8 arquivos em `migrations/`; dois usuários PostgreSQL em produção |
 | ADR-017 | PostgreSQL JSONB | `tickets.custom_fields`, `comments.metadata`, `events.payload`, `products.settings` — quatro usos distintos de JSONB |
 
 ### Estrutura de arquivos do repositório da Stega
 
 ```
 crystallized-perl-stega/
-├── CLAUDE.md
 ├── README.md
 ├── LICENSE
 ├── DEVELOPMENT.md
 ├── cpanfile
+├── cpanfile.snapshot
+├── .env.example
 ├── .gitignore
 ├── .gitattributes
+├── compose.yml                 ← PostgreSQL + RabbitMQ + Keycloak (ADR-014)
+├── Dockerfile                  ← multi-stage build: deps → test → production
 │
 ├── api/
-│   └── stega.yaml              ← contrato OpenAPI v3 (ADR-015)
+│   └── stega.yaml              ← contrato OpenAPI v3 (ADR-015, documentação)
 │
 ├── migrations/
 │   ├── 001_create_users.sql
@@ -485,30 +531,54 @@ crystallized-perl-stega/
 │   ├── 004_add_ticket_search.sql
 │   ├── 005_create_comments.sql
 │   ├── 006_create_events.sql
-│   └── 007_create_tags.sql
+│   ├── 007_create_tags.sql
+│   └── 008_relax_user_email_unique.sql
 │
 ├── lib/
 │   ├── Stega.pm
 │   └── Stega/
 │       ├── Controller/
+│       │   ├── Auth.pm
+│       │   ├── Comment.pm
+│       │   ├── Dashboard.pm
+│       │   ├── Health.pm
+│       │   ├── Product.pm
+│       │   ├── Ticket.pm
+│       │   ├── User.pm
+│       │   └── Webhook.pm
 │       ├── Model/
+│       │   ├── Comment.pm
+│       │   ├── Product.pm
+│       │   ├── Ticket.pm
+│       │   └── User.pm
 │       ├── Job/
+│       │   ├── CheckSlaBreaches.pm
+│       │   ├── GenerateActivityReport.pm
+│       │   ├── ProcessWebhookPayload.pm
+│       │   └── SendWelcomeNotification.pm
 │       └── Worker/
+│           └── NotificationWorker.pm
 │
 ├── templates/                  ← templates Mojolicious (frontend server-rendered)
 │   ├── layouts/
 │   │   └── default.html.ep
+│   ├── auth/
 │   ├── dashboard/
-│   ├── tickets/
 │   ├── products/
-│   ├── users/
-│   └── auth/
+│   ├── tickets/
+│   └── users/
 │
-├── public/                     ← assets estáticos (CSS, JS mínimo)
-│   └── vendor/
-│       └── bootstrap/
+├── public/                     ← assets estáticos
+│   └── logo.svg
+│
+├── assets/
+│   └── images/
+│       └── banner.png
 │
 ├── t/
+│   ├── lib/
+│   │   └── Stega/Test/
+│   │       └── Helper.pm       ← make_jwt() e bearer_header() para testes
 │   ├── 001_health.t
 │   ├── 010_tickets_api.t
 │   ├── 011_comments_api.t
@@ -518,14 +588,19 @@ crystallized-perl-stega/
 │
 ├── eng/
 │   ├── migrate.pl              ← executa migrations (ADR-016)
+│   ├── migrate.ps1             ← wrapper PowerShell para Windows
 │   ├── seed.pl                 ← popula banco com dados de exemplo
+│   ├── seed.ps1
 │   ├── setup.pl                ← verifica dependências do ambiente (ADR-013)
+│   ├── setup.ps1
 │   └── worker.pl               ← inicia NotificationWorker RabbitMQ
 │
 ├── script/
 │   └── stega                   ← script principal Mojolicious
 │
-└── compose.yml                 ← PostgreSQL + RabbitMQ + Keycloak (ADR-014)
+└── docker/
+    └── postgres-init/
+        └── 01-keycloak-db.sql  ← cria database keycloak no primeiro boot
 ```
 
 ### Três processos em produção
@@ -591,10 +666,12 @@ Referências: [Mojolicious](../references/mojolicious.md),
 - Quando uma ADR muda (versão de módulo, convenção), a Stega precisa ser atualizada
 - O domínio de tickets é mais complexo que uma simples API; o leitor iniciante precisa de um guia de introdução ao domínio antes dos guias técnicos
 
-**Ações necessárias**:
-- Renomear referências à "Pluma" em ADRs existentes (004–017) para "Stega" nos exemplos de código à medida que os guias forem escritos — não é necessário fazer retroativamente em todos os arquivos agora
-- Criar repositório `hibex-solutions/crystallized-perl-stega` com a estrutura definida nesta ADR
-- Implementar as 7 migrations em `migrations/` (schemas definidos acima)
-- Criar `api/stega.yaml` com o contrato OpenAPI v3 das rotas listadas
-- Criar `compose.yml` com PostgreSQL, RabbitMQ e Keycloak para desenvolvimento local
-- Criar arquivo de referência `docs/references/minion.md` para o módulo Minion, referenciando esta ADR e ADR-008
+**Ações realizadas** *(todas concluídas — repositório em produção)*:
+- Repositório `hibex-solutions/crystallized-perl-stega` criado com a estrutura definida nesta ADR
+- 8 migrations implementadas (001–007 + 008 que relaxa UNIQUE em `email`)
+- `api/stega.yaml` criado com o contrato OpenAPI v3 completo das rotas `/api/v1/...`
+- `compose.yml` criado com PostgreSQL 17, RabbitMQ 4.3, Keycloak 26.6 e perfil `full` para a aplicação
+- Arquivo de referência `docs/references/minion.md` criado e referenciando esta ADR e ADR-008
+
+**Ações em andamento**:
+- Guias de usuário em `docs/guides/` usando a Stega como contexto (próxima fase)

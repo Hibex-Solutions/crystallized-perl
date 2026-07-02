@@ -29,7 +29,7 @@ A versão segue [CalVer](https://calver.org) no formato `YYYY.MM.MINOR`
 - ADR-004: Framework web — Mojolicious + Hypnotoad
 - ADR-005: Gerenciamento de dependências — Carton + cpanm
 - ADR-006: Sistema de orientação a objetos — Moo + Moo::Role
-- ADR-007: Banco de dados relacional — PostgreSQL 16
+- ADR-007: Banco de dados relacional — PostgreSQL 17
 - ADR-008: Message broker — RabbitMQ com AMQP 0-9-1
 - ADR-009: Autenticação — Keycloak + JWT (Crypt::JWT)
 - ADR-010: Orquestração — Kubernetes com InitContainer para migrations

@@ -78,7 +78,11 @@ KEYCLOAK_CLIENT_ID=myapp-api
 KEYCLOAK_CLIENT_SECRET=secret  # apenas para workers/M2M com client confidencial
 ```
 
-### Carregamento do JWKS no startup
+### Carregamento do JWKS e validação de JWT
+
+O JWKS pode ser carregado no startup (mais eficiente) ou na primeira validação
+(mais simples). Recomenda-se carregá-lo no startup e cacheá-lo no processo —
+isso evita uma chamada HTTP ao Keycloak em cada requisição:
 
 ```perl
 # lib/MyApp.pm
@@ -86,57 +90,52 @@ use Mojo::Base 'Mojolicious';
 use Mojo::UserAgent;
 use Crypt::JWT qw(decode_jwt);
 
+my $jwks_cache;   # cache por processo (cada worker Hypnotoad tem o seu)
+
 sub startup {
     my $self = shift;
 
-    # Carregar chaves públicas do Keycloak (JWKS) no startup
-    my $jwks_url = $ENV{KEYCLOAK_URL}
-        . '/realms/' . $ENV{KEYCLOAK_REALM}
-        . '/protocol/openid-connect/certs';
+    $self->helper(verify_jwt => sub {
+        my ($c, $token) = @_;
 
-    my $ua   = Mojo::UserAgent->new;
-    my $jwks = $ua->get($jwks_url)->result->json;
-
-    # Disponibilizar JWKS via helper (acessível em controladores e na própria app)
-    $self->helper(jwks => sub { $jwks });
-
-    # Helper de validação de JWT disponível nos controladores
-    $self->helper(_validate_jwt => \&_validate_jwt_impl);
-
-    $self->plugin('OpenAPI', {
-        url      => $self->home->rel_file('api/openapi.yaml'),
-        security => {
-            BearerAuth => sub {
-                my ($c, $def, $scopes, $cb) = @_;
-                my $claims = $c->_validate_jwt;
-                return $c->$cb() if $claims;
-                $c->render(json => { error => 'Unauthorized' }, status => 401);
-                return $c->$cb('Unauthorized');
-            },
-        },
+        my $claims = eval { _decode_jwt($token) };
+        return (undef, "Token inválido: $@") if $@;
+        return ($claims, undef);
     });
 }
 
-sub _validate_jwt_impl {
-    my $self = shift;
+sub _decode_jwt {
+    my $token = shift;
 
-    my $auth   = $self->req->headers->authorization // '';
-    my ($token) = $auth =~ /^Bearer\s+(.+)$/i;
-    return unless $token;
+    # Lê o alg do header sem validação criptográfica
+    my ($hdr_b64) = split /\./, $token;
+    $hdr_b64 =~ tr/-_/+\//;
+    $hdr_b64 .= '=' x ((4 - length($hdr_b64) % 4) % 4);
+    require MIME::Base64; require JSON::PP;
+    my $alg = JSON::PP::decode_json(MIME::Base64::decode_base64($hdr_b64))->{alg} // '';
 
-    my $claims = eval {
-        decode_jwt(
-            token     => $token,
-            key_func  => sub { $self->jwks },   # chave pública do JWKS via helper
-            verify_iss => $ENV{JWT_ISSUER},
-            verify_aud => $ENV{JWT_AUDIENCE},
-        );
-    };
-    return if $@;   # token inválido ou expirado
+    if ($alg eq 'HS256') {
+        my $secret = $ENV{TEST_JWT_SECRET} or die "TEST_JWT_SECRET não configurada";
+        return decode_jwt(token => $token, key => $secret, accepted_alg => 'HS256');
+    }
 
-    # Armazenar claims na stash para uso nos controladores
-    $self->stash('jwt_claims', $claims);
-    return $claims;
+    # RS256/RS384/RS512: usa cache do JWKS para evitar HTTP por requisição
+    unless ($jwks_cache) {
+        my $url = $ENV{KEYCLOAK_URL} . '/realms/' . ($ENV{KEYCLOAK_REALM} // 'app')
+                . '/protocol/openid-connect/certs';
+        $jwks_cache = Mojo::UserAgent->new->get($url)->result->json;
+    }
+
+    my ($jwk) = grep { ($_->{use} // '') eq 'sig' } @{$jwks_cache->{keys} // []};
+    $jwk //= ($jwks_cache->{keys} // [])->[0];
+    die "Nenhuma chave no JWKS" unless $jwk;
+
+    # Crypt::JWT aceita um hash JWK diretamente no parâmetro 'key'
+    return decode_jwt(
+        token        => $token,
+        key          => $jwk,
+        accepted_alg => ['RS256', 'RS384', 'RS512'],
+    );
 }
 
 1;
@@ -239,8 +238,8 @@ services:
     environment:
       KC_DB:               postgres
       KC_DB_URL:           jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME:      myapp_user
-      KC_DB_PASSWORD:      dev_password
+      KC_DB_USERNAME:      postgres      # mesmo superusuário do compose em desenvolvimento
+      KC_DB_PASSWORD:      postgres_dev
       KEYCLOAK_ADMIN:      admin
       KEYCLOAK_ADMIN_PASSWORD: admin
     ports:

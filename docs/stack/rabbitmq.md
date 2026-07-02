@@ -44,7 +44,7 @@ porque o processo existe apenas para consumir mensagens.
 # compose.yml
 services:
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:4.3-management
     environment:
       RABBITMQ_DEFAULT_USER: stega
       RABBITMQ_DEFAULT_PASS: dev_password

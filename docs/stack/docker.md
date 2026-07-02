@@ -147,7 +147,7 @@ services:
         condition: service_healthy
 
   postgres:
-    image: postgres:16
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB:       stega
       POSTGRES_USER:     stega_migrate
@@ -162,7 +162,7 @@ services:
       retries: 5
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:4.3-management
     environment:
       RABBITMQ_DEFAULT_USER: stega
       RABBITMQ_DEFAULT_PASS: dev_password

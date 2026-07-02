@@ -54,7 +54,7 @@ Referências: [Moo](../references/moo.md),
 # lib/MyApp/Model/User.pm
 package MyApp::Model::User;
 use Moo;
-use namespace::clean;
+use namespace::autoclean;
 
 # Atributo obrigatório, somente leitura
 has 'id' => (
@@ -95,7 +95,7 @@ sub as_json {
 # lib/MyApp/Role/Timestamped.pm
 package MyApp::Role::Timestamped;
 use Moo::Role;
-use namespace::clean;
+use namespace::autoclean;
 
 has 'created_at' => ( is => 'ro', default => sub { time() } );
 has 'updated_at' => ( is => 'rw' );
@@ -108,7 +108,7 @@ has 'updated_at' => ( is => 'rw' );
 package MyApp::Model::Post;
 use Moo;
 with 'MyApp::Role::Timestamped';   # compõe o Role
-use namespace::clean;
+use namespace::autoclean;
 
 has 'title'   => ( is => 'ro', required => 1 );
 has 'content' => ( is => 'rw' );
@@ -179,7 +179,7 @@ sub show {
   modelos — misturar os dois erroneamente é um erro silencioso mas confuso
 
 **Ações necessárias**:
-- Adicionar `namespace::clean` ao `cpanfile` (mantém o namespace do pacote limpo
+- Adicionar `namespace::autoclean` ao `cpanfile` (mantém o namespace do pacote limpo
   removendo funções importadas do escopo público após a compilação)
 - Documentar no guia de desenvolvimento a distinção entre controladores (`Mojo::Base`)
   e modelos (`Moo`)

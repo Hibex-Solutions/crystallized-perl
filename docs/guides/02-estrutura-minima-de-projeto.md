@@ -155,26 +155,26 @@ pelo Carton:
 requires 'perl', '5.042';
 
 # Framework web (ADR-004)
-requires 'Mojolicious',                  '9.0';
-
-# Contrato de API OpenAPI v3 (ADR-015)
-requires 'Mojolicious::Plugin::OpenAPI', '5.0';
+requires 'Mojolicious', '9.0';
 
 # Acesso a banco de dados (ADR-016)
-requires 'Mojo::Pg',                     '4.0';
+requires 'Mojo::Pg', '4.0';
 
 # Sistema de OO para modelos de domínio (ADR-006)
-requires 'Moo',                          '2.0';
-requires 'namespace::clean';
+requires 'Moo',                  '2.0';
+requires 'namespace::autoclean', '0.29';
 
 # Autenticação JWT (ADR-009)
-requires 'Crypt::JWT';
+requires 'Crypt::JWT', '0.034';
 
-# RabbitMQ — publicação não-bloqueante da aplicação (ADR-008)
-requires 'Mojo::RabbitMQ::Client';
+# RabbitMQ — publicação e consumo via AMQP 0-9-1 (ADR-008)
+requires 'Net::AMQP::RabbitMQ', '2.40000';
 
-# RabbitMQ — consumo bloqueante no worker (ADR-008)
-requires 'Net::AMQP::RabbitMQ';
+# Assinatura HMAC para webhooks
+requires 'Digest::HMAC', '1.04';
+
+# JSON puro-Perl (disponível no core do Perl mas fixado em versão mínima)
+requires 'JSON::PP', '4.0';
 
 # Fila local de jobs (ADR-018)
 requires 'Minion';
@@ -182,9 +182,8 @@ requires 'Minion::Backend::Pg';
 
 # Dependências de teste — não incluídas na imagem de produção
 on 'test' => sub {
-    requires 'Test::More';
-    requires 'Test::MockObject';
-    requires 'Devel::Cover';
+    requires 'Test::More',   '1.302';
+    requires 'Devel::Cover', '1.38';
 };
 ```
 
@@ -303,9 +302,7 @@ mkdir -p lib/Stega/Job
 mkdir -p lib/Stega/Worker
 mkdir -p migrations
 mkdir -p script
-mkdir -p t/unit/model
-mkdir -p t/api
-mkdir -p t/integration
+mkdir -p t/lib/Stega/Test
 mkdir -p eng
 mkdir -p api
 ```
@@ -338,10 +335,9 @@ Resultado esperado:
 ./migrations/
 ./script/
 ./t/
-./t/api/
-./t/integration/
-./t/unit/
-./t/unit/model/
+./t/lib/
+./t/lib/Stega/
+./t/lib/Stega/Test/
 ```
 
 ---
@@ -359,7 +355,7 @@ Resultado esperado:
 | `lib/` | Código Perl da aplicação (namespaces `Stega::`) | [ADR-004](/adrs/ADR-004-framework-web-mojolicious) |
 | `migrations/` | Arquivos SQL de migration (`NNN_descricao.sql`) | [ADR-016](/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg) |
 | `script/` | Ponto de entrada Mojolicious | [ADR-004](/adrs/ADR-004-framework-web-mojolicious) |
-| `t/` | Testes organizados em `unit/`, `api/`, `integration/` | [ADR-011](/adrs/ADR-011-estrategia-de-testes) |
+| `t/` | Testes com prefixo numérico (`NNN_nome.t`); helpers de teste em `t/lib/` | [ADR-011](/adrs/ADR-011-estrategia-de-testes) |
 | `eng/` | Scripts de engenharia em Perl | [ADR-013](/adrs/ADR-013-scripts-de-engenharia) |
 | `api/` | Contrato OpenAPI v3 (`stega.yaml`) | [ADR-015](/adrs/ADR-015-contrato-de-api-openapi-v3) |
 

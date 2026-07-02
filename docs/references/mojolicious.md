@@ -20,4 +20,4 @@ de framework web do stack.
 - ADR-011: Estratégia de Testes
 - ADR-013: Scripts de Engenharia em Perl
 - ADR-015: Contrato de API — OpenAPI v3
-- ADR-018: Aplicação de Demonstração — Pluma
+- ADR-018: Aplicação de Demonstração — Stega

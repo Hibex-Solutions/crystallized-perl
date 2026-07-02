@@ -61,22 +61,21 @@ carton update Some::Module
 requires 'perl', '5.042';
 
 # Produção — sempre presentes na imagem final
-requires 'Mojolicious',                  '9.0';
-requires 'Mojolicious::Plugin::OpenAPI', '5.0';
-requires 'Mojo::Pg',                     '4.0';
-requires 'Moo',                          '2.0';
-requires 'namespace::clean';
-requires 'Crypt::JWT';
-requires 'Mojo::RabbitMQ::Client';
-requires 'Net::AMQP::RabbitMQ';
+requires 'Mojolicious',          '9.0';
+requires 'Mojo::Pg',             '4.0';
+requires 'Moo',                  '2.0';
+requires 'namespace::autoclean', '0.29';
+requires 'Crypt::JWT',           '0.034';
+requires 'Net::AMQP::RabbitMQ', '2.40000';
+requires 'Digest::HMAC',         '1.04';
+requires 'JSON::PP',             '4.0';
 requires 'Minion';
 requires 'Minion::Backend::Pg';
 
 # Apenas em testes — não incluídas na imagem de produção
 on 'test' => sub {
-    requires 'Test::More';
-    requires 'Test::MockObject';
-    requires 'Devel::Cover';
+    requires 'Test::More',   '1.302';
+    requires 'Devel::Cover', '1.38';
 };
 
 # Apenas em desenvolvimento local — não no CI nem na imagem

@@ -119,14 +119,14 @@ services:
     command: carton exec perl script/my_app.pl daemon --listen http://*:3000
 
   postgres:
-    image: postgres:16
+    image: postgres:17-alpine
     environment:
-      POSTGRES_DB:       myapp
-      POSTGRES_USER:     myapp
-      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB:       stega
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres_dev
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:4.3-management
     ports:
       - "15672:15672"    # Management UI para desenvolvimento
 ```

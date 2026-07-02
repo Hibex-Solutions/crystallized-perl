@@ -5,22 +5,26 @@ title: OpenAPI v3
 
 # OpenAPI v3
 
-> **Decisão**: OpenAPI v3 como contrato da API REST; `Mojolicious::Plugin::OpenAPI`
-> para validação automática de requisições e respostas.
+> **Decisão**: OpenAPI v3 como documentação do contrato da API REST — o arquivo
+> `api/stega.yaml` é a fonte única de verdade do contrato, usada para gerar
+> documentação e clientes, mas **não** como plugin de validação em runtime.
 > [ADR-015 — Contrato de API OpenAPI v3](/adrs/ADR-015-contrato-de-api-openapi-v3)
 
 ---
 
 ## Por que OpenAPI
 
-O contrato OpenAPI v3 é a fonte única de verdade da API da Stega: define
-endpoints, parâmetros, schemas de corpo e códigos de resposta. O plugin
-`Mojolicious::Plugin::OpenAPI` valida automaticamente toda requisição recebida
-contra o schema — retornando `400 Bad Request` com mensagem de erro estruturada
-antes que o controller seja chamado. Não é necessário escrever validação manual.
+O contrato OpenAPI v3 em `api/stega.yaml` define endpoints, parâmetros, schemas
+de corpo e códigos de resposta. É a referência que:
 
-O arquivo `api/stega.yaml` também serve como documentação interativa
-(Swagger UI / Redoc) e como base para geração de clientes em outras linguagens.
+- Desenvolvedores leem para entender a API sem ver o código
+- Ferramentas usam para gerar clientes em outras linguagens
+- Renders como Swagger UI e Redoc exibem como documentação interativa
+- Testes de integração consultam para confirmar que as respostas estão conformes
+
+A validação de entrada fica nos controllers, não no YAML — essa decisão simplifica
+o rastreamento de erros e evita a dependência de um plugin de runtime adicional
+(ver [ADR-015](/adrs/ADR-015-contrato-de-api-openapi-v3) para a análise completa).
 
 ---
 
@@ -161,7 +165,7 @@ paths:
                   id:
                     type: integer
         "400":
-          description: Dados inválidos (validação automática pelo plugin)
+          description: Dados inválidos
           content:
             application/json:
               schema:
@@ -170,112 +174,63 @@ paths:
 
 ---
 
-## Carregando o plugin no Mojolicious
+## Validação de entrada nos controllers
+
+A validação fica no controller, usando a estrutura de dados recebida:
 
 ```perl
-# lib/Stega.pm
-sub startup {
+# lib/Stega/Controller/Ticket.pm
+sub create {
     my $self = shift;
+    my $data = $self->req->json;
 
-    # Plugin OpenAPI — carrega o contrato e ativa validação automática
-    $self->plugin('OpenAPI', {
-        url    => $self->home->child('api/stega.yaml'),
-        schema => 'v3',
-    });
-
-    # As rotas OpenAPI já estão registradas pelo plugin usando operationId
-    # Mapeamento: operationId => 'controller#ação'
-    # listTickets  => Stega::Controller::Ticket::list
-    # createTicket => Stega::Controller::Ticket::create
-}
-```
-
----
-
-## Mapeamento operationId → controller
-
-O plugin converte automaticamente o `operationId` em `controller#ação`:
-
-| operationId | Módulo | Método |
-|-------------|--------|--------|
-| `listTickets` | `Stega::Controller::Ticket` | `list` |
-| `createTicket` | `Stega::Controller::Ticket` | `create` |
-| `getTicket` | `Stega::Controller::Ticket` | `get` |
-| `updateTicket` | `Stega::Controller::Ticket` | `update` |
-| `listComments` | `Stega::Controller::Comment` | `list` |
-
-A convenção: `camelCase` no `operationId` é convertido para `snake_case` no nome
-do módulo e método. Ou configure explicitamente com `x-mojo-to`.
-
----
-
-## Validação automática — o que o plugin faz
-
-Com o plugin carregado, toda requisição é validada antes do controller:
-
-```bash
-# Requisição sem campo obrigatório 'title'
-curl -X POST http://localhost:3000/api/v1/tickets \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"product_id": 1, "body": "Sem título"}'
-
-# Resposta automática do plugin (400)
-{
-  "errors": [
-    {
-      "message": "Missing property.",
-      "path": "/title"
+    unless ($data && $data->{title} && $data->{body} && $data->{product_id}) {
+        return $self->render(status => 400, json => { error => 'title, body e product_id são obrigatórios' });
     }
-  ]
-}
-```
 
-```bash
-# Valor fora do enum
-curl -X POST http://localhost:3000/api/v1/tickets \
-  -d '{"product_id":1,"title":"Bug","body":"Detalhes","priority":"urgente"}'
-
-# Resposta automática
-{
-  "errors": [
-    {
-      "message": "Not in enum list: urgente.",
-      "path": "/priority"
+    my $priority = $data->{priority} // 'medium';
+    unless (grep { $_ eq $priority } qw(low medium high critical)) {
+        return $self->render(status => 400, json => { error => "priority inválida: $priority" });
     }
-  ]
+
+    # ... lógica de criação
 }
 ```
 
 ---
 
-## Testes com validação OpenAPI
+## Testes de conformidade com o contrato
+
+Os testes verificam que as respostas da API estão conformes ao contrato OpenAPI:
 
 ```perl
-# t/api/tickets.t
+# t/010_tickets_api.t
 use Test::More;
 use Test::Mojo;
+use lib 't/lib';
+use Stega::Test::Helper qw(make_jwt bearer_header);
 
 my $t = Test::Mojo->new('Stega');
 
-subtest 'body inválido retorna 400 com mensagem estruturada' => sub {
+subtest 'POST /api/v1/tickets — sem body retorna 400' => sub {
     $t->post_ok('/api/v1/tickets',
-        { Authorization => 'Bearer test' },
-        json => { product_id => 1 }   # falta title e body (obrigatórios)
+        bearer_header('agent'),
+        json => {}
     )->status_is(400)
-     ->json_like('/errors/0/message', qr/Missing property/);
+     ->json_has('/error');
 };
 
-subtest 'priority inválida retorna 400' => sub {
+subtest 'POST /api/v1/tickets — priority inválida retorna 400' => sub {
     $t->post_ok('/api/v1/tickets',
-        { Authorization => 'Bearer test' },
+        bearer_header('agent'),
         json => {
             product_id => 1,
             title      => 'Bug crítico',
             body       => 'Descrição detalhada do problema',
-            priority   => 'urgente',   # não está no enum
+            priority   => 'urgente',
         }
-    )->status_is(400);
+    )->status_is(400)
+     ->json_has('/error');
 };
 
 done_testing;
@@ -283,33 +238,56 @@ done_testing;
 
 ---
 
-## Documentação interativa
+## Gerar documentação interativa
 
-O plugin expõe automaticamente a documentação OpenAPI via Swagger UI:
+O arquivo `api/stega.yaml` pode ser servido via Swagger UI ou Redoc como
+documentação interativa. Usando `npx`:
 
+```bash
+# Swagger UI local (desenvolvimento)
+npx @redocly/cli preview-docs api/stega.yaml
 ```
-# Disponível em desenvolvimento
-http://localhost:3000/api/v1
+
+Ou com Docker:
+
+```bash
+docker run -p 8081:8080 \
+  -e SWAGGER_JSON=/api/stega.yaml \
+  -v $(pwd)/api:/api \
+  swaggerapi/swagger-ui
+# Acesse: http://localhost:8081
 ```
 
-Para personalizar o path de documentação:
+---
+
+## Alternativa: Mojolicious::Plugin::OpenAPI
+
+Se o projeto precisar de validação automática de entrada em runtime,
+`Mojolicious::Plugin::OpenAPI` pode ser adicionado ao `cpanfile` e registrado no `startup`:
 
 ```perl
+# cpanfile (adicionar se necessário)
+requires 'Mojolicious::Plugin::OpenAPI', '5.0';
+```
+
+```perl
+# lib/Stega.pm — startup
 $self->plugin('OpenAPI', {
-    url      => $self->home->child('api/stega.yaml'),
-    schema   => 'v3',
-    spec_url => '/api-docs',   # URL da spec JSON
+    url    => $self->home->child('api/stega.yaml'),
+    schema => 'v3',
 });
 ```
+
+A Stega não usa este plugin na implementação de referência — a validação explícita
+nos controllers foi considerada mais simples de depurar e sem dependência adicional.
 
 ---
 
 ## Armadilhas comuns
 
-| Armadilha | Descrição | Como evitar |
-|-----------|-----------|-------------|
-| `operationId` duplicado | O plugin registra apenas um handler por `operationId` | Nomes únicos globais no YAML |
-| Schema sem `required` | Campos não marcados como `required` passam como `null` silenciosamente | Liste campos obrigatórios explicitamente |
-| `$ref` com caminho errado | `$ref: '#/components/schemas/Foo'` — typo causa erro silencioso | Valide o YAML com `openapi-generator validate` |
-| Resposta não documentada | O plugin emite warning para códigos de status não no YAML | Documente todos os códigos possíveis (200, 201, 400, 401, 404) |
-| YAML vs JSON para o schema | O plugin aceita ambos, mas YAML é mais legível para manutenção | Use YAML; JSON apenas se gerado por ferramenta |
+| Armadilha | Como evitar |
+|-----------|-------------|
+| Schema desatualizado em relação ao controller | Atualizar `api/stega.yaml` junto com qualquer mudança de contrato nas rotas |
+| `$ref` com caminho errado | Validar com `npx @redocly/cli lint api/stega.yaml` antes de commitar |
+| Códigos de status não documentados | Incluir todos os códigos possíveis (200, 201, 400, 401, 404) no YAML |
+| YAML vs JSON para o schema | Use YAML; JSON apenas se gerado por ferramenta externa |

@@ -193,8 +193,11 @@ curl -s http://localhost:3000/api/v1/tickets
 
 ## Passo 6 — Escrever os primeiros testes
 
+Os arquivos de teste usam prefixo numérico para garantir ordem de execução determinística.
+O nome após o número descreve o que é testado:
+
 ```perl
-# t/api/health.t
+# t/001_health.t
 use strict;
 use warnings;
 use Test::More;
@@ -204,13 +207,13 @@ my $t = Test::Mojo->new('Stega');
 
 $t->get_ok('/healthz')
   ->status_is(200)
-  ->json_is('/status', 'ok');
+  ->json_has('/status');
 
 done_testing;
 ```
 
 ```perl
-# t/api/tickets.t
+# t/010_tickets_api.t
 use strict;
 use warnings;
 use Test::More;
@@ -218,10 +221,10 @@ use Test::Mojo;
 
 my $t = Test::Mojo->new('Stega');
 
-subtest 'GET /api/v1/tickets retorna array' => sub {
+subtest 'GET /api/v1/tickets — sem autenticação retorna 401' => sub {
     $t->get_ok('/api/v1/tickets')
-      ->status_is(200)
-      ->json_is([], 'lista vazia por ora');
+      ->status_is(401)
+      ->json_has('/error');
 };
 
 done_testing;
@@ -236,8 +239,8 @@ carton exec prove -lr t/
 Saída esperada:
 
 ```
-t/api/health.t  .. ok
-t/api/tickets.t .. ok
+t/001_health.t      .. ok
+t/010_tickets_api.t .. ok
 All tests successful.
 ```
 
@@ -297,9 +300,8 @@ crystallized-perl-stega/
 │           ├── Health.pm        ← GET /healthz
 │           └── Ticket.pm        ← GET /api/v1/tickets (stub)
 ├── t/
-│   └── api/
-│       ├── health.t
-│       └── tickets.t
+│   ├── 001_health.t
+│   └── 010_tickets_api.t
 └── local/                       ← módulos do Carton (não commitado)
 ```
 

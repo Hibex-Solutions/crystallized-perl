@@ -18,23 +18,30 @@ O stack precisa de um mecanismo que:
 
 ## Decisão
 
-**OpenAPI v3** como especificação do contrato de API, em arquivo YAML, com
-**Mojolicious::Plugin::OpenAPI** para validação automática de entrada e saída.
+**OpenAPI v3** como especificação do contrato de API, em arquivo YAML (`api/stega.yaml`),
+usado como **artefato de documentação e revisão de código** — não como plugin de validação
+em runtime.
+
+A spec é a fonte da verdade do contrato: descreve todas as rotas, schemas de entrada e
+saída, parâmetros e esquemas de segurança. O roteamento e a validação de entrada são
+implementados explicitamente nos controladores Mojolicious.
+
+**Nota sobre `Mojolicious::Plugin::OpenAPI`**: existe um plugin que lê o YAML e
+automatiza roteamento, validação e geração de Swagger UI. Ele é uma alternativa válida
+mas adiciona acoplamento entre o YAML e os `operationId` dos controladores. A Stega
+optou por separar os dois: o YAML documenta, o código valida. Projetos que preferem
+validação automática de entrada podem adotar o plugin sem mudar a spec.
 
 ## Justificativa
 
 A OpenAPI Specification (anteriormente Swagger) é o padrão de mercado para descrição
-de APIs HTTP. O plugin `Mojolicious::Plugin::OpenAPI` lê o arquivo YAML da
-especificação e:
+de APIs HTTP. Manter a spec em YAML no repositório oferece:
 
-1. **Roteia automaticamente** as operações do contrato para os controladores Mojolicious
-2. **Valida a entrada** (parâmetros de URL, query, body) contra os schemas definidos
-   no YAML — retornando HTTP 400 antes de qualquer código do controlador ser executado
-3. **Valida a saída** em modo de desenvolvimento, verificando se o JSON de resposta
-   está conforme o schema declarado
-4. **Serve a documentação** via Swagger UI no endpoint `/api` (configurável)
-5. **Integra security schemes**: quando um security scheme `Bearer` é declarado no
-   YAML, o plugin chama automaticamente o security handler registrado na aplicação
+1. **Contrato versionável**: mudanças na API são visíveis em code review junto com o código
+2. **Documentação navegável**: a spec pode ser servida via Swagger UI ou Redoc em qualquer
+   ambiente sem dependência da aplicação estar no ar
+3. **Contrato para clientes**: integradores podem gerar clientes de API a partir do YAML
+4. **Revisão explícita**: diff de YAML em PRs torna mudanças de contrato visíveis
 
 Referências: [OpenAPI Initiative](../references/openapi.md),
 [Mojolicious](../references/mojolicious.md)
@@ -268,7 +275,8 @@ Isso é configurável no plugin se outra convenção for preferida.
   controladores — erros de mapeamento causam erros em runtime
 
 **Ações necessárias**:
-- Criar o diretório `api/` e o arquivo `api/openapi.yaml` com as rotas iniciais
-- Registrar o plugin OpenAPI no `startup()` da aplicação
-- Declarar `Mojolicious::Plugin::OpenAPI` no `cpanfile`
-- Usar `$self->render(openapi => ...)` em todos os controladores que usam o plugin
+- Criar o diretório `api/` e o arquivo `api/stega.yaml` com o contrato completo das rotas
+- Manter a spec sincronizada com a implementação: toda rota nova ou alterada deve ter
+  o YAML correspondente atualizado no mesmo PR
+- (Opcional) Adicionar `Mojolicious::Plugin::OpenAPI` ao `cpanfile` e registrar no
+  `startup()` para projetos que queiram validação automática de entrada via schema

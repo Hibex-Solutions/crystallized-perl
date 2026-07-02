@@ -15,7 +15,7 @@ Ao final deste guia você terá um ambiente de desenvolvimento funcional com:
 
 - Perl **5.42.2** instalado e isolado do Perl do sistema operacional
 - **Carton** configurado para gerenciamento de dependências do projeto
-- **Docker Compose** rodando PostgreSQL 16, RabbitMQ 3 e Keycloak 25
+- **Docker Compose** rodando PostgreSQL 17, RabbitMQ 4.3 e Keycloak 26.6
 - O repositório `crystallized-perl-stega` clonado e com dependências instaladas
 - A aplicação Stega iniciada em modo de desenvolvimento em `http://localhost:3000`
 
@@ -216,13 +216,13 @@ O arquivo `.env.example` contém valores pré-configurados para desenvolvimento 
 Para o caminho A ou B (Perl nativo), ajuste as URLs de banco se necessário:
 
 ```bash
-# .env — valores padrão para desenvolvimento local
+# .env — valores padrão para desenvolvimento local (copie de .env.example)
 
-# Aplicação — usuário DML (SELECT, INSERT, UPDATE, DELETE)
-POSTGRESQL_URL=postgresql://stega_app:dev_password@localhost:5432/stega
+# Aplicação — conexão principal
+POSTGRESQL_URL=postgresql://postgres:postgres_dev@localhost:5432/stega
 
-# Migration — usuário DDL (CREATE, ALTER, DROP)
-POSTGRESQL_MIGRATION_URL=postgresql://stega_migrate:dev_password@localhost:5432/stega
+# Migration — mesma conexão em desenvolvimento (usuários distintos em produção)
+POSTGRESQL_MIGRATION_URL=postgresql://postgres:postgres_dev@localhost:5432/stega
 
 # RabbitMQ
 RABBITMQ_HOST=localhost
@@ -232,9 +232,10 @@ RABBITMQ_PASSWORD=dev_password
 # Keycloak
 KEYCLOAK_URL=http://localhost:8080
 KEYCLOAK_REALM=stega
-KEYCLOAK_CLIENT_ID=stega-api
-JWT_ISSUER=http://localhost:8080/realms/stega
-JWT_AUDIENCE=stega-api
+KEYCLOAK_CLIENT_ID=stega-web
+
+# Modo de teste: aceita tokens HS256 sem Keycloak em execução
+TEST_JWT_SECRET=test_secret_apenas_para_desenvolvimento
 ```
 
 ### 3. Iniciar os serviços de apoio
@@ -249,8 +250,8 @@ docker compose up -d postgres rabbitmq keycloak
 **Caminho C (Docker Compose completo):**
 
 ```bash
-# Sobe tudo: serviços de apoio + aplicação + workers
-docker compose up
+# Sobe tudo: serviços de apoio + aplicação + workers (perfil "full")
+docker compose --profile full up
 ```
 
 Aguarde os serviços ficarem saudáveis. O Keycloak leva ~30 segundos para iniciar.
@@ -282,11 +283,13 @@ disponível por padrão no Strawberry Perl (Windows) e nas imagens Perl do Docke
 carton exec perl eng/migrate.pl
 
 # Caminho C (dentro do container):
-docker compose exec app carton exec perl eng/migrate.pl
+docker compose exec app perl eng/migrate.pl
 ```
 
-As 7 migrations da Stega criam as tabelas: `users`, `products`, `tickets`,
-`comments`, `events`, `tags` e `ticket_tags`.
+As 8 migrations da Stega criam as tabelas `users`, `products`, `tickets`,
+`comments`, `events`, `tags` e `ticket_tags`, e uma migration adicional
+(008) relaxa a constraint `UNIQUE` do campo `email` na tabela `users`
+(o identificador primário é `keycloak_id`, não o e-mail).
 
 ### 6. Popular com dados de exemplo
 
@@ -295,7 +298,7 @@ As 7 migrations da Stega criam as tabelas: `users`, `products`, `tickets`,
 carton exec perl eng/seed.pl
 
 # Caminho C:
-docker compose exec app carton exec perl eng/seed.pl
+docker compose exec app perl eng/seed.pl
 ```
 
 ### 7. Iniciar a aplicação (caminhos A e B)
@@ -304,7 +307,8 @@ docker compose exec app carton exec perl eng/seed.pl
 carton exec perl script/stega daemon --listen http://*:3000
 ```
 
-Para o Caminho C, a aplicação já está rodando após `docker compose up`.
+Para o Caminho C, a aplicação já está rodando após `docker compose --profile full up`
+(os serviços `migrate`, `seed` e `app` sobem automaticamente nessa ordem).
 
 ### 8. Verificar
 
@@ -346,7 +350,7 @@ curl -s http://localhost:3000/healthz | grep ok
 carton exec prove -lr t/
 
 # Rodar um arquivo de teste específico
-carton exec prove -lv t/api/health.t
+carton exec prove -lv t/001_health.t
 
 # Reiniciar apenas um serviço de apoio
 docker compose restart postgres
