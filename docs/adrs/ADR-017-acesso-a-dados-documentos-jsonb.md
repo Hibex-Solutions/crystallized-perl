@@ -163,3 +163,68 @@ $self->pg->db->query(
 - Usar `{ json => ... }` para escrita e `->expand` para leitura com Mojo::Pg
 - Documentar as convenções de schema de cada tipo de evento em `docs/references/` ou
   como JSON Schema inline nos guias
+
+## Revisão 2026-07-04 — `->expand` era aspiracional; escrita real não usa `{ json => ... }`
+
+Ao investigar um bug relatado na Stega (colunas JSONB — `products.settings`,
+`tickets.custom_fields`, `comments.metadata`, `events.payload` — voltando como string
+JSON crua nas respostas da API em vez de objeto aninhado), confirmei que esta ADR
+descrevia `->expand` como prática já adotada, mas a implementação real nunca chamava
+esse método: todo `Stega::Repository::Pg::{Product,Comment,Ticket}` usava `->hash`/
+`->hashes` puro. O único ponto que precisava do dado desserializado
+(`Ticket::list_events`, para expor `payload` de eventos) contornava a lacuna com um
+`decode_json` manual linha a linha em vez de usar o recurso nativo do Mojo::Pg — o
+próprio comentário no código antigo já registrava não saber da alternativa.
+
+**Corrigido**: `->expand->hash` / `->expand->hashes` em toda leitura das três classes
+(inclusive nas que não tocam coluna JSONB — `expand` é no-op nesse caso, e aplicar de
+forma uniforme evita ter que auditar query por query e esquecer alguma no futuro). O
+`decode_json` manual em `list_events` foi removido. Validado via suíte automatizada
+(`t/020_products_api.t` — o teste antes documentava o bug com `like`/regex esperando
+string crua, agora afirma `/data/settings/sla_hours/critical` como valor numérico
+aninhado) e via Docker Compose completo.
+
+**Escrita real diverge do exemplo `{ json => ... }` desta ADR**: nenhum
+`Stega::Repository::Pg::*` usa esse açúcar. O padrão real é `encode_json()` explícito
+do Perl antes do bind, com cast `::jsonb` explícito na própria query:
+
+```perl
+# lib/Stega/Repository/Pg/Product.pm — padrão real, não { json => ... }
+my $settings_json = $attrs{settings} ? encode_json($attrs{settings}) : undef;
+
+$self->db->query(
+    'INSERT INTO products (name, slug, description, settings)
+     VALUES ($1, $2, $3, $4::jsonb) RETURNING *',
+    $attrs{name}, $attrs{slug}, $attrs{description}, $settings_json
+)->expand->hash;
+```
+
+Motivo observado no código real: colunas JSONB nesta aplicação são opcionais, e o
+padrão condicional (`$attrs{settings} ? encode_json(...) : undef`) para decidir entre
+serializar e `NULL` é mais direto de auditar ao lado do resto dos binds do que embutir
+a mesma condicional dentro de um valor `{ json => ... }`.
+
+O exemplo de schema também foi corrigido para refletir a convenção real de migração
+(ADR-016, revisão 2026-07-02 — `from_dir`, um diretório numerado por migração, não um
+arquivo único `NNN_descricao.sql`):
+
+```sql
+-- migrations/6/up.sql (evento real da Stega — Mojo::Pg::Migrations, from_dir)
+CREATE TABLE events (
+    id          BIGSERIAL    PRIMARY KEY,
+    ticket_id   BIGINT       NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    actor_id    UUID         REFERENCES users(id),
+    type        TEXT         NOT NULL,
+    payload     JSONB        NOT NULL DEFAULT '{}',
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ON events (ticket_id);
+CREATE INDEX ON events (type);
+CREATE INDEX ON events USING GIN (payload);
+```
+
+Os demais exemplos desta ADR (`?` como placeholder, `jsonb_set`, operadores `@>`/`#>`/
+`?`) permanecem ilustrativos e genéricos, no mesmo estilo já usado pela ADR-016 — a
+Stega usa `$1, $2, ...` (bind posicional do Postgres) em vez de `?`, mas isso não é uma
+divergência de decisão, só de estilo de exemplo entre ADR e código real.
