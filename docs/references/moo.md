@@ -21,3 +21,4 @@ de introspecção sejam necessários no futuro.
 
 ## Referenciada em
 - ADR-006: Sistema de Orientação a Objetos — Moo
+- ADR-020: Camada de Domínio e Repository

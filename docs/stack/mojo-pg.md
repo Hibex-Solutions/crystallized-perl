@@ -5,8 +5,9 @@ title: Mojo::Pg + Migrations
 
 # Mojo::Pg + Migrations
 
-> **Decisão**: Mojo::Pg como camada de acesso a dados relacional; sistema de
-> migrations multi-arquivo com marcadores `-- N up/down`.
+> **Decisão**: Mojo::Pg como camada de acesso a dados relacional; migrations em
+> diretórios por versão (`migrations/N/up.sql`, `migrations/N/down.sql`) via
+> `Mojo::Pg::Migrations->from_dir`.
 > [ADR-016 — Acesso a Dados Relacional Mojo::Pg](/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg)
 
 ---
@@ -49,80 +50,74 @@ POSTGRESQL_MIGRATION_URL=postgresql://stega_migrate:senha@localhost:5432/stega
 
 ---
 
-## Queries básicas
+## Queries básicas — no Repository, não no Controller
+
+Os métodos `insert`/`update`/`delete` "açucarados" do `Mojo::Pg::Database` (usados em
+alguns exemplos genéricos de Mojo::Pg por aí) não são usados na Stega — todo acesso
+usa `query` com SQL explícito e placeholders posicionais (`$1`, `$2`, ...), a mesma
+sintaxe que o driver `DBD::Pg` espera. E, desde a extensão do padrão **Domain +
+Repository** para `Ticket` e `Comment` (ver [ADR-020](/adrs/ADR-020-dominio-e-repository)),
+esse SQL não fica mais no Controller — vive em uma classe
+`Stega::Repository::Pg::<Entidade>`, que o Controller injeta e chama:
 
 ```perl
-# lib/Stega/Controller/Ticket.pm
-package Stega::Controller::Ticket;
-use Mojo::Base 'Mojolicious::Controller';
+# lib/Stega/Repository/Pg/Ticket.pm (trecho)
+package Stega::Repository::Pg::Ticket;
+use v5.42;
+use utf8;
+use Moo;
+use namespace::autoclean;
+
+with 'Stega::Repository::Ticket';
+
+has db => (is => 'ro', required => 1);   # $c->pg->db
 
 # SELECT — retorna hashref único
-sub show {
-    my $self = shift;
-
-    my $ticket = $self->pg->db->query(
-        'SELECT id, title, status, priority FROM tickets WHERE id = ?',
-        $self->param('id')
-    )->hash;
-
-    return $self->render(json => { error => 'not_found' }, status => 404)
-        unless $ticket;
-
-    $self->render(json => $ticket);
-}
-
-# SELECT — retorna array de hashrefs
-sub list {
-    my $self = shift;
-    my $status = $self->param('status') // 'open';
-
-    my $tickets = $self->pg->db->query(
-        'SELECT id, title, status, priority FROM tickets WHERE status = ? ORDER BY created_at DESC',
-        $status
-    )->hashes->to_array;
-
-    $self->render(json => $tickets);
+sub find {
+    my ($self, $id) = @_;
+    return $self->db->query('SELECT * FROM tickets WHERE id = $1', $id)->hash;
 }
 
 # INSERT com RETURNING
-sub create {
-    my $self = shift;
-    my $body = $self->req->json;
-
-    my $id = $self->pg->db->insert(
-        'tickets',
-        {
-            product_id => $body->{product_id},
-            author_id  => $self->stash('jwt_claims')->{sub},
-            title      => $body->{title},
-            body       => $body->{body},
-        },
-        { returning => 'id' }
-    )->hash->{id};
-
-    $self->render(json => { id => $id }, status => 201);
+sub insert_ticket {
+    my ($self, %attrs) = @_;
+    return $self->db->query(
+        'INSERT INTO tickets (product_id, author_id, title, body, priority)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        $attrs{product_id}, $attrs{author_id}, $attrs{title}, $attrs{body},
+        $attrs{priority} // 'medium'
+    )->hash;
 }
 
 # UPDATE
-sub update_status {
-    my ($self, $ticket_id, $new_status) = @_;
-
-    $self->pg->db->update(
-        'tickets',
-        { status => $new_status, updated_at => \'now()' },
-        { id     => $ticket_id }
-    );
-}
-
-# DELETE
 sub archive {
-    my $self = shift;
-    $self->pg->db->delete('tickets', { id => $self->param('id') });
-    $self->render(json => { ok => 1 });
+    my ($self, $id) = @_;
+    return $self->db->query(
+        "UPDATE tickets SET status = 'closed', updated_at = NOW() WHERE id = \$1 RETURNING *", $id
+    )->hash;
 }
 
 1;
 ```
+
+```perl
+# lib/Stega/Controller/Ticket.pm (trecho) — só orquestra, nunca chama $c->pg->db
+sub api_show {
+    my $c  = shift;
+    $c->openapi->valid_input or return;
+
+    my $ticket = Stega::Repository::Pg::Ticket->new(db => $c->pg->db)->find($c->param('id'));
+    return $c->render(json => { error => 'Não encontrado' }, status => 404) unless $ticket;
+
+    $c->render(json => { data => $ticket });
+}
+```
+
+`Product` também passou por esse retrofit (mesmo dia, 2026-07-03) — `Stega::Controller::Product`
+não chama `$c->pg->db` diretamente em nenhuma ação. As três entidades (`Product`,
+`Ticket`, `Comment`) seguem o mesmo padrão: Repository cobre leituras e escritas; ver a
+"Revisão 2026-07-03" da ADR-020 para o histórico completo, incluindo o período em que
+`Product` ficou temporariamente para trás.
 
 ---
 
@@ -208,23 +203,25 @@ operações da aplicação — veja [PostgreSQL](/stack/postgresql).
 
 ```perl
 # eng/migrate.pl
-use strict;
-use warnings;
+use v5.42;
+use utf8;
+use open ':std', ':encoding(UTF-8)';
+$| = 1;
 use Mojo::Pg;
 
 my $pg = Mojo::Pg->new($ENV{POSTGRESQL_MIGRATION_URL});
 
-$pg->migrations
+my $migrations = $pg->migrations
    ->name('stega')
-   ->from_dir('migrations')   # lê arquivos NNN_descricao.sql em ordem
-   ->migrate;                  # aplica versões pendentes
+   ->from_dir('migrations');   # lê migrations/N/up.sql e migrations/N/down.sql
+$migrations->migrate;          # aplica versões pendentes
 
-print "Migrations aplicadas com sucesso.\n";
+say 'Migrations aplicadas com sucesso.';
 ```
 
 ```sql
--- migrations/001_create_users.sql
--- 1 up
+-- migrations/1/up.sql
+-- create_users
 CREATE TABLE users (
     id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     keycloak_id  TEXT         NOT NULL UNIQUE,
@@ -233,14 +230,19 @@ CREATE TABLE users (
     role         TEXT         NOT NULL DEFAULT 'customer',
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
+```
 
--- 1 down
+```sql
+-- migrations/1/down.sql
+-- create_users (down)
 DROP TABLE users;
 ```
 
-**Convenção de nomenclatura**: `NNN_descricao.sql` onde `NNN` é um inteiro
-sequencial. O Mojo::Pg usa os marcadores `-- N up` e `-- N down` para identificar
-as versões, não o nome do arquivo — mas o nome facilita a leitura do histórico Git.
+**Convenção**: cada versão é uma pasta nomeada com um inteiro puro (`1`, `2`, ...) —
+`from_dir` identifica a versão pelo nome do diretório, não por marcadores dentro do
+arquivo. O comentário na primeira linha de cada `up.sql`/`down.sql` é convenção do
+stack para manter o histórico legível, não é lido pelo Mojo::Pg. Ver
+[ADR-016](/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg).
 
 ---
 

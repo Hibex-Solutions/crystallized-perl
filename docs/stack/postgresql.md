@@ -79,12 +79,13 @@ POSTGRESQL_MIGRATION_URL=postgresql://stega_migrate:senha_migrate@localhost:5432
 
 ## Schema da Stega — migrations
 
-Cada migration é um arquivo SQL em `migrations/` seguindo a convenção
-`NNN_descricao.sql` com marcadores `-- N up` e `-- N down`:
+Cada migration é uma pasta em `migrations/` nomeada pelo número da versão, com
+`up.sql`/`down.sql` carregados via `Mojo::Pg::Migrations->from_dir` (ver
+[ADR-016](/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg)):
 
 ```sql
--- migrations/003_create_tickets.sql
--- 3 up
+-- migrations/3/up.sql
+-- create_tickets
 CREATE TABLE tickets (
     id              BIGSERIAL    PRIMARY KEY,
     product_id      BIGINT       NOT NULL REFERENCES products(id),
@@ -103,8 +104,11 @@ CREATE TABLE tickets (
 
 CREATE INDEX ON tickets (status);
 CREATE INDEX ON tickets (product_id, status);
+```
 
--- 3 down
+```sql
+-- migrations/3/down.sql
+-- create_tickets (down)
 DROP TABLE tickets;
 ```
 
@@ -113,8 +117,8 @@ DROP TABLE tickets;
 ## Busca em texto completo
 
 ```sql
--- Migration 004: índice e trigger para busca
--- 4 up
+-- migrations/4/up.sql
+-- add_ticket_search: índice e trigger para busca full-text
 CREATE INDEX tickets_search_idx ON tickets USING GIN (search_vector);
 
 CREATE OR REPLACE FUNCTION tickets_search_vector_update()

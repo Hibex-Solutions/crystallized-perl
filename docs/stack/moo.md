@@ -223,18 +223,27 @@ has 'name' => (
 
 ## Integração com controllers Mojolicious
 
+Exemplo genérico de como um modelo Moo poderia ser instanciado a partir de uma linha de
+banco dentro de um Controller. Vale uma ressalva sobre a Stega real: hoje
+`Stega::Model::Ticket` (e os demais em `lib/Stega/Model/`) não são instanciados em
+nenhum lugar do código — Controllers leem e escrevem hashrefs crus vindos de
+`$c->pg->db->query(...)->hash` (ou, para `Ticket`/`Comment`/parte de `Product`, de uma
+classe `Stega::Repository::Pg::<Entidade>` — ver
+[ADR-020](/adrs/ADR-020-dominio-e-repository)), sem essa camada intermediária de objeto.
+O padrão abaixo é válido caso você queira adotá-lo, mas não é o que a Stega faz hoje:
+
 ```perl
-# lib/Stega/Controller/Ticket.pm
-package Stega::Controller::Ticket;
+# lib/MyApp/Controller/Ticket.pm
+package MyApp::Controller::Ticket;
 use Mojo::Base 'Mojolicious::Controller';
 
-use Stega::Model::Ticket;   # importa o modelo Moo
+use MyApp::Model::Ticket;   # importa o modelo Moo
 
 sub show {
     my $self = shift;
 
     my $row = $self->pg->db->query(
-        'SELECT id, title, status, priority FROM tickets WHERE id = ?',
+        'SELECT id, title, status, priority FROM tickets WHERE id = $1',
         $self->param('id')
     )->hash;
 
@@ -242,7 +251,7 @@ sub show {
         unless $row;
 
     # Instancia o modelo Moo a partir dos dados do banco
-    my $ticket = Stega::Model::Ticket->new(%{$row});
+    my $ticket = MyApp::Model::Ticket->new(%{$row});
 
     $self->render(json => $ticket->as_json);
 }

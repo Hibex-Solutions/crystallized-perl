@@ -21,3 +21,6 @@ de framework web do stack.
 - ADR-013: Scripts de Engenharia em Perl
 - ADR-015: Contrato de API — OpenAPI v3
 - ADR-018: Aplicação de Demonstração — Stega
+- ADR-019: Cabeçalho Padrão de Código Perl
+- ADR-020: Camada de Domínio e Repository
+- ADR-021: Configuração Centralizada — Stega::Config

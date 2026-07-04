@@ -21,3 +21,4 @@ cultura "Modern Perl" que o projeto abraça.
 - ADR-003: Paleta de Cores e Tipografia
 - ADR-004: Framework Web — Mojolicious
 - ADR-006: Sistema de Orientação a Objetos — Moo
+- ADR-019: Cabeçalho Padrão de Código Perl

@@ -73,6 +73,42 @@ on 'test' => sub {
 };
 ```
 
+### Semântica dos números de versão no `cpanfile`
+
+Um ponto que gera confusão recorrente: `requires 'Mojolicious', '9.0';` **não** fixa a
+versão 9.0. No formato `cpanfile` (`CPAN::Meta::Spec`), um número de versão isolado
+significa "esta versão **ou mais recente**" — equivalente a `>= 9.0`. Ao rodar
+`carton install`, o `cpanm` resolve e instala a versão mais recente disponível no CPAN
+que satisfaça essa condição (por exemplo, `9.46`), não exatamente `9.0`.
+
+A fixação exata de versão acontece em uma camada diferente: o `cpanfile.snapshot`,
+gerado pelo Carton após a resolução, grava a versão exata que foi instalada. É esse
+arquivo — versionado no Git — que garante reprodutibilidade bit-a-bit entre ambientes,
+não os números escritos no `cpanfile`.
+
+Quando uma versão exata ou um intervalo é necessário (não apenas um mínimo), o
+`cpanfile` aceita a sintaxe de `CPAN::Meta::Spec`:
+
+```perl
+requires 'Module::Exemplo', '== 1.5';           # exatamente 1.5
+requires 'Module::Exemplo', '>= 1.0, < 2.0';     # intervalo
+requires 'Module::Exemplo', '!= 1.7';            # exclui uma versão específica
+```
+
+Essa sintaxe de intervalo é usada de fato na Stega (ADR-018) para travar
+`Mojolicious::Plugin::OpenAPI` e sua dependência `JSON::Validator` abaixo da versão
+que introduziu `Net::IDN::Encode` — um módulo XS incompatível com Perl 5.42 (usa a
+função `uvuni_to_utf8_flags`, removida do core nessa versão):
+
+```perl
+requires 'Mojolicious::Plugin::OpenAPI', '>= 5.11, < 5.12';
+requires 'JSON::Validator',              '>= 5.13, < 5.16';
+```
+
+Esse é o padrão recomendado sempre que uma versão futura de uma dependência tem
+incompatibilidade conhecida: travar um teto (`< X`) em vez de fixar um único número,
+preservando a possibilidade de receber correções de patch dentro da faixa segura.
+
 ### Ciclo de uso
 
 ```bash

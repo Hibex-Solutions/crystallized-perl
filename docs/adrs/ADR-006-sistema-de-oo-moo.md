@@ -53,6 +53,8 @@ Referências: [Moo](../references/moo.md),
 ```perl
 # lib/MyApp/Model/User.pm
 package MyApp::Model::User;
+use v5.42;
+use utf8;
 use Moo;
 use namespace::autoclean;
 
@@ -94,6 +96,8 @@ sub as_json {
 ```perl
 # lib/MyApp/Role/Timestamped.pm
 package MyApp::Role::Timestamped;
+use v5.42;
+use utf8;
 use Moo::Role;
 use namespace::autoclean;
 
@@ -106,6 +110,8 @@ has 'updated_at' => ( is => 'rw' );
 ```perl
 # lib/MyApp/Model/Post.pm
 package MyApp::Model::Post;
+use v5.42;
+use utf8;
 use Moo;
 with 'MyApp::Role::Timestamped';   # compõe o Role
 use namespace::autoclean;
@@ -124,7 +130,7 @@ nativo do Mojolicious:
 ```perl
 # lib/MyApp/Controller/User.pm
 package MyApp::Controller::User;
-use Mojo::Base 'Mojolicious::Controller';
+use Mojo::Base 'Mojolicious::Controller', -strict;
 
 # Controlador usa MyApp::Model::User (Moo) para lógica de domínio
 use MyApp::Model::User;
@@ -160,7 +166,7 @@ sub show {
 
 | Alternativa | Observação |
 |-------------|-----------|
-| **`class` nativo (Perl 5.42+)** | Estável desde 5.40, sem dependências CPAN. **Adotado parcialmente**: válido para value objects simples sem roles. **Bloqueador para uso geral**: não há suporte nativo a roles — e a Stega usa roles extensivamente (`HasTimestamps`, `HasAuditLog`). Previsto para revisão quando o suporte a roles chegar na linguagem |
+| **`class` nativo (Perl 5.42+)** | Estável desde 5.40, sem dependências CPAN. **Adotado parcialmente**: válido para value objects simples sem roles. **Bloqueador para uso geral**: não há suporte nativo a roles na linguagem — qualquer modelo que precise compor comportamento compartilhado via Role continua exigindo Moo. Revisão 2026-07-01: os modelos atuais da Stega (`Stega::Model::*`) são, na prática, value objects simples sem composição de roles — candidatos válidos a migrar para `class` nativo no futuro; a permanência em Moo hoje é por uniformidade com o restante do stack, não por uma dependência real de Roles. Previsto para revisão quando o projeto tiver um modelo que realmente precise de comportamento compartilhado via Role |
 | **Moose** | Pesado (múltiplas deps XS), startup mais lento — impacta negativamente o boot de containers; vantagens de introspecção avançada não são necessárias para o escopo atual |
 | **OO manual (`bless`)** | Verboso, propenso a boilerplate inconsistente entre classes, sem Roles, sem construtores automáticos — inadequado para um projeto com múltiplos modelos de domínio |
 | **Class::Tiny** | Muito minimalista: sem suporte a Roles, sem validação de atributos, sem `isa` — insuficiente para o nível de organização exigido pelo stack |

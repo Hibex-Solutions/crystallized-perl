@@ -104,34 +104,32 @@ my $role = $claims->{role}
 
 ### Schema do banco de dados
 
-As migrations seguem a convenção multi-arquivo da ADR-016 (`NNN_descricao.sql`).
-Cada arquivo de migration usa a notação `-- N up` / `-- N down` do `Mojo::Pg`.
+As migrations seguem a convenção de diretórios da ADR-016: cada versão é uma pasta
+`migrations/N/` com `up.sql`/`down.sql`, carregada via
+`Mojo::Pg::Migrations->from_dir`.
 
 ```sql
--- migrations/001_create_users.sql
--- 1 up
+-- migrations/1/up.sql
+-- create_users
 CREATE TABLE users (
     id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     keycloak_id  TEXT         NOT NULL UNIQUE,
-    email        TEXT         NOT NULL UNIQUE,  -- UNIQUE removido pela migration 008
+    email        TEXT         NOT NULL UNIQUE,  -- UNIQUE removido pela migration 8
     display_name TEXT         NOT NULL,
     avatar_url   TEXT,
     role         TEXT         NOT NULL DEFAULT 'customer',
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
-
--- 1 down
-DROP TABLE users;
 ```
 
-> **Atenção**: a migration `008_relax_user_email_unique.sql` remove a constraint `UNIQUE`
+> **Atenção**: a migration 8 (`migrations/8/up.sql`) remove a constraint `UNIQUE`
 > do campo `email`, pois o identificador primário de usuário é `keycloak_id`. O e-mail
 > pode mudar no Keycloak e dois ambientes de teste podem ter JWTs com o mesmo e-mail
 > mas `keycloak_id`s distintos.
 
 ```sql
--- migrations/002_create_products.sql
--- 2 up
+-- migrations/2/up.sql
+-- create_products
 CREATE TABLE products (
     id          BIGSERIAL    PRIMARY KEY,
     name        TEXT         NOT NULL,
@@ -144,14 +142,11 @@ CREATE TABLE products (
     is_active   BOOLEAN      NOT NULL DEFAULT true,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
-
--- 2 down
-DROP TABLE products;
 ```
 
 ```sql
--- migrations/003_create_tickets.sql
--- 3 up
+-- migrations/3/up.sql
+-- create_tickets
 CREATE TABLE tickets (
     id              BIGSERIAL    PRIMARY KEY,
     product_id      BIGINT       NOT NULL REFERENCES products(id),
@@ -166,7 +161,7 @@ CREATE TABLE tickets (
     custom_fields   JSONB,
     -- custom_fields: campos livres definidos pelo produto
     -- ex: {"version": "2.3.1", "os": "Windows 11", "browser": "Chrome 120"}
-    search_vector   TSVECTOR,    -- mantido por trigger (ver migration 004)
+    search_vector   TSVECTOR,    -- mantido por trigger (ver migration 4)
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     resolved_at     TIMESTAMPTZ
@@ -177,14 +172,11 @@ CREATE INDEX ON tickets (priority);
 CREATE INDEX ON tickets (assignee_id);
 CREATE INDEX ON tickets (product_id, status);
 CREATE INDEX ON tickets (author_id);
-
--- 3 down
-DROP TABLE tickets;
 ```
 
 ```sql
--- migrations/004_add_ticket_search.sql
--- 4 up
+-- migrations/4/up.sql
+-- add_ticket_search
 CREATE INDEX tickets_search_idx ON tickets USING GIN (search_vector);
 
 CREATE OR REPLACE FUNCTION tickets_search_vector_update()
@@ -200,16 +192,11 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER tickets_search_vector_trig
 BEFORE INSERT OR UPDATE OF title, body ON tickets
 FOR EACH ROW EXECUTE FUNCTION tickets_search_vector_update();
-
--- 4 down
-DROP TRIGGER tickets_search_vector_trig ON tickets;
-DROP FUNCTION tickets_search_vector_update();
-DROP INDEX tickets_search_idx;
 ```
 
 ```sql
--- migrations/005_create_comments.sql
--- 5 up
+-- migrations/5/up.sql
+-- create_comments
 CREATE TABLE comments (
     id          BIGSERIAL    PRIMARY KEY,
     ticket_id   BIGINT       NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -226,14 +213,11 @@ CREATE TABLE comments (
 );
 
 CREATE INDEX ON comments (ticket_id);
-
--- 5 down
-DROP TABLE comments;
 ```
 
 ```sql
--- migrations/006_create_events.sql
--- 6 up
+-- migrations/6/up.sql
+-- create_events
 CREATE TABLE events (
     id          BIGSERIAL    PRIMARY KEY,
     ticket_id   BIGINT       NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -250,26 +234,11 @@ CREATE TABLE events (
 CREATE INDEX ON events (ticket_id);
 CREATE INDEX ON events (type);
 CREATE INDEX ON events USING GIN (payload);
-
--- 6 down
-DROP TABLE events;
 ```
 
 ```sql
--- migrations/008_relax_user_email_unique.sql
--- 8 up
--- Email não é identificador primário; keycloak_id é a chave.
--- A constraint UNIQUE em email impede upserts legítimos quando dois JWTs
--- têm o mesmo email mas keycloak_ids distintos (e.g., ambientes de teste).
-ALTER TABLE users DROP CONSTRAINT users_email_key;
-
--- 8 down
-ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
-```
-
-```sql
--- migrations/007_create_tags.sql
--- 7 up
+-- migrations/7/up.sql
+-- create_tags
 CREATE TABLE tags (
     id   BIGSERIAL  PRIMARY KEY,
     name TEXT       NOT NULL UNIQUE
@@ -280,11 +249,28 @@ CREATE TABLE ticket_tags (
     tag_id     BIGINT  NOT NULL REFERENCES tags(id)     ON DELETE CASCADE,
     PRIMARY KEY (ticket_id, tag_id)
 );
-
--- 7 down
-DROP TABLE ticket_tags;
-DROP TABLE tags;
 ```
+
+```sql
+-- migrations/8/up.sql
+-- relax_user_email_unique: email não é identificador primário; keycloak_id é
+-- a chave. A constraint UNIQUE em email impede upserts legítimos quando dois
+-- JWTs têm o mesmo email mas keycloak_ids distintos (e.g., ambientes de teste).
+ALTER TABLE users DROP CONSTRAINT users_email_key;
+```
+
+```sql
+-- migrations/9/up.sql
+-- ticket_assignment_index: índice parcial para a consulta de visibilidade
+-- de agentes — acelera a busca de tickets em que o agente foi atribuído em
+-- algum momento.
+CREATE INDEX IF NOT EXISTS events_assigned_to
+    ON events ((payload->>'assigned_to'))
+    WHERE type = 'assigned';
+```
+
+Cada `up.sql` tem um `down.sql` correspondente com a operação inversa (ver os
+arquivos reais em `migrations/` no repositório da Stega).
 
 ### Frontend e rotas da aplicação
 
@@ -366,10 +352,12 @@ lib/
     │   ├── Webhook.pm                   ← recepção de webhooks externos
     │   └── Health.pm                    ← GET /healthz
     ├── Model/
-    │   ├── Ticket.pm                    ← lógica de domínio (Moo)
+    │   ├── Ticket.pm                    ← forma dos dados (Moo)
     │   ├── Comment.pm                   ← modelo de comentário (Moo)
     │   ├── Product.pm                   ← modelo de produto (Moo)
     │   └── User.pm                      ← modelo de usuário local (Moo)
+    ├── Domain/
+    │   └── TicketPolicy.pm              ← regras de negócio puras, sem banco (ADR-011)
     ├── Job/
     │   ├── SendWelcomeNotification.pm   ← Minion: notificação ao primeiro login
     │   ├── CheckSlaBreaches.pm          ← Minion: verifica tickets sem resposta no prazo
@@ -503,7 +491,7 @@ Isso garante que o GitHub ou sistema externo não aguarde o processamento comple
 | ADR-013 | Scripts de engenharia | `eng/migrate.pl`, `eng/seed.pl`, `eng/setup.pl`, `eng/worker.pl` |
 | ADR-014 | Ambiente de desenvolvimento | `compose.yml` com PostgreSQL, RabbitMQ, Keycloak, Minion worker e Notification worker |
 | ADR-015 | OpenAPI v3 | `api/stega.yaml` — contrato completo de todas as rotas `/api/v1/...` |
-| ADR-016 | Mojo::Pg + migrations | Toda persistência relacional; 8 arquivos em `migrations/`; dois usuários PostgreSQL em produção |
+| ADR-016 | Mojo::Pg + migrations | Toda persistência relacional; 9 versões em `migrations/N/{up,down}.sql` via `from_dir`; dois usuários PostgreSQL em produção |
 | ADR-017 | PostgreSQL JSONB | `tickets.custom_fields`, `comments.metadata`, `events.payload`, `products.settings` — quatro usos distintos de JSONB |
 
 ### Estrutura de arquivos do repositório da Stega
@@ -524,15 +512,16 @@ crystallized-perl-stega/
 ├── api/
 │   └── stega.yaml              ← contrato OpenAPI v3 (ADR-015, documentação)
 │
-├── migrations/
-│   ├── 001_create_users.sql
-│   ├── 002_create_products.sql
-│   ├── 003_create_tickets.sql
-│   ├── 004_add_ticket_search.sql
-│   ├── 005_create_comments.sql
-│   ├── 006_create_events.sql
-│   ├── 007_create_tags.sql
-│   └── 008_relax_user_email_unique.sql
+├── migrations/                  ← from_dir: uma pasta por versão (ADR-016)
+│   ├── 1/ { up.sql, down.sql }  ← create_users
+│   ├── 2/ { up.sql, down.sql }  ← create_products
+│   ├── 3/ { up.sql, down.sql }  ← create_tickets
+│   ├── 4/ { up.sql, down.sql }  ← add_ticket_search
+│   ├── 5/ { up.sql, down.sql }  ← create_comments
+│   ├── 6/ { up.sql, down.sql }  ← create_events
+│   ├── 7/ { up.sql, down.sql }  ← create_tags
+│   ├── 8/ { up.sql, down.sql }  ← relax_user_email_unique
+│   └── 9/ { up.sql, down.sql }  ← ticket_assignment_index
 │
 ├── lib/
 │   ├── Stega.pm
@@ -551,6 +540,8 @@ crystallized-perl-stega/
 │       │   ├── Product.pm
 │       │   ├── Ticket.pm
 │       │   └── User.pm
+│       ├── Domain/
+│       │   └── TicketPolicy.pm
 │       ├── Job/
 │       │   ├── CheckSlaBreaches.pm
 │       │   ├── GenerateActivityReport.pm
@@ -579,20 +570,22 @@ crystallized-perl-stega/
 │   ├── lib/
 │   │   └── Stega/Test/
 │   │       └── Helper.pm       ← make_jwt() e bearer_header() para testes
+│   ├── unit/
+│   │   └── domain/
+│   │       └── ticket_policy.t ← Stega::Domain::TicketPolicy, sem banco (ADR-011)
 │   ├── 001_health.t
 │   ├── 010_tickets_api.t
 │   ├── 011_comments_api.t
 │   ├── 020_products_api.t
 │   ├── 030_webhooks.t
-│   └── 040_auth.t
+│   ├── 040_auth.t
+│   ├── 050_ticket_assignment.t
+│   └── 060_business_rules.t
 │
-├── eng/
+├── eng/                        ← sem wrapper .ps1 (ADR-013) — mesmo comando em qualquer SO
 │   ├── migrate.pl              ← executa migrations (ADR-016)
-│   ├── migrate.ps1             ← wrapper PowerShell para Windows
 │   ├── seed.pl                 ← popula banco com dados de exemplo
-│   ├── seed.ps1
 │   ├── setup.pl                ← verifica dependências do ambiente (ADR-013)
-│   ├── setup.ps1
 │   └── worker.pl               ← inicia NotificationWorker RabbitMQ
 │
 ├── script/

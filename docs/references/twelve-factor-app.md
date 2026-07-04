@@ -23,3 +23,4 @@ identidade visual como fundamento conceitual do mascote.
 - ADR-013: Scripts de Engenharia em Perl
 - ADR-014: Ambiente de Desenvolvimento Local
 - ADR-016: Acesso a Dados Relacional — Mojo::Pg e Migrations
+- ADR-021: Configuração Centralizada — Stega::Config

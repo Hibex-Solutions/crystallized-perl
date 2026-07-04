@@ -167,9 +167,17 @@ sub list {
 
 ## Fluxo OIDC para a interface web
 
+Versão simplificada — o `Stega::Controller::Auth` real usa `$c->verify_jwt` (JWKS, ver
+seção anterior) em vez de `decode_jwt` direto, e sincroniza o usuário via
+`Stega::Repository::Pg::User->upsert_from_keycloak` (ver
+[ADR-020](/adrs/ADR-020-dominio-e-repository)) — um upsert atômico com `INSERT ...
+ON CONFLICT DO UPDATE`, não o método `insert` com `on_conflict` do exemplo abaixo (que
+nunca existiu no código real; `Stega::Repository::Pg::*` sempre usa `query` com SQL
+explícito, nunca os métodos açucarados de `Mojo::Pg::Database`).
+
 ```perl
-# lib/Stega/Controller/Auth.pm
-package Stega::Controller::Auth;
+# lib/MyApp/Controller/Auth.pm
+package MyApp::Controller::Auth;
 use Mojo::Base 'Mojolicious::Controller';
 
 my $KEYCLOAK_BASE  = $ENV{KEYCLOAK_URL}      // 'http://localhost:8080';

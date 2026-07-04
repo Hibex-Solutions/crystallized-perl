@@ -12,4 +12,4 @@ garantindo que as convenções ensinadas nos guias sejam consistentes com as rec
 da comunidade core.
 
 ## Referenciada em
-- A definir — disponível como referência para guia de estilo e boas práticas
+- ADR-019: Cabeçalho Padrão de Código Perl

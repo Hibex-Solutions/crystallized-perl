@@ -128,6 +128,7 @@ perl -v   # confirma: version 42, subversion 2
 ### Windows — berrybrew
 
 ```powershell
+berrybrew fetch              # atualiza o cache local de versões disponíveis
 berrybrew install 5.42.2_64
 berrybrew switch 5.42.2_64
 perl -v

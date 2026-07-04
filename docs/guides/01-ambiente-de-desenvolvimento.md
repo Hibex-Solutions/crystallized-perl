@@ -122,8 +122,13 @@ perl -v
 
 ```bash
 perlbrew install-cpanm
-cpanm Carton
+cpanm --notest Carton
 ```
+
+`--notest` pula a suíte de testes das dependências transitivas do Carton (`Menlo`,
+`Parse::PMFile`, etc.) — mesma razão do `--notest` usado na instalação do Perl acima:
+os testes verificam o pacote em si, não o seu código, e podem falhar por fatores do
+ambiente sem que o módulo deixe de funcionar.
 
 Verifique:
 
@@ -140,18 +145,39 @@ Pule para [Clonar e configurar a Stega](#clonar-e-configurar-a-stega).
 
 ### 1. Instalar o berrybrew
 
-Baixe e execute o instalador do
-[repositório oficial](https://github.com/dnmfarrell/berrybrew/releases).
+O repositório oficial e ativamente mantido é
+[`stevieb9/berrybrew`](https://github.com/stevieb9/berrybrew) — o projeto nasceu em
+`dnmfarrell/berrybrew`, mas a manutenção foi transferida para Steve Bertrand, e o
+próprio README do repositório original aponta para lá.
+
+Duas formas de instalar (execute como Administrador — berrybrew precisa alterar o
+`PATH` de sistema):
+
+```powershell
+# Opção A — instalador: baixe e execute berrybrewInstaller.exe a partir de
+# https://github.com/stevieb9/berrybrew
+
+# Opção B — clonar e configurar manualmente
+git clone https://github.com/stevieb9/berrybrew
+cd berrybrew
+bin\berrybrew.exe config
+```
 
 Abra um novo terminal PowerShell após a instalação.
 
 ### 2. Instalar Perl 5.42.2 com Strawberry
 
 ```powershell
+berrybrew fetch              # atualiza a lista de versões disponíveis
 berrybrew available          # lista versões disponíveis
 berrybrew install 5.42.2_64
 berrybrew switch 5.42.2_64
 ```
+
+`berrybrew available` lê de uma lista **local em cache** — numa instalação nova, essa
+lista costuma estar desatualizada e não mostra versões recentes como `5.42.2_64`.
+`berrybrew fetch` atualiza esse cache a partir do repositório de versões antes de
+listar; sem isso, a versão que você procura pode simplesmente não aparecer.
 
 Verifique:
 
@@ -173,7 +199,7 @@ git config --global core.autocrlf false
 ### 4. Instalar Carton
 
 ```powershell
-cpanm Carton
+cpanm --notest Carton
 ```
 
 Pule para [Clonar e configurar a Stega](#clonar-e-configurar-a-stega).
@@ -276,6 +302,12 @@ O Carton lê o `cpanfile.snapshot` e instala as versões exatas de todos os mód
 no diretório `local/`. Módulos XS como `DBD::Pg` precisam de compilador C —
 disponível por padrão no Strawberry Perl (Windows) e nas imagens Perl do Docker.
 
+**Windows nativo**: `Net::AMQP::RabbitMQ` falha ao instalar (`undefined reference to
+'poll'`) — é uma limitação real do pacote no MinGW/Winsock, não uma falta de
+ferramenta. Os demais módulos instalam normalmente; esse módulo só é usado pelo
+worker de notificações da Stega. Veja a tabela de "Solução de problemas comuns" no
+final deste guia.
+
 ### 5. Aplicar as migrations do banco
 
 ```bash
@@ -286,10 +318,11 @@ carton exec perl eng/migrate.pl
 docker compose exec app perl eng/migrate.pl
 ```
 
-As 8 migrations da Stega criam as tabelas `users`, `products`, `tickets`,
-`comments`, `events`, `tags` e `ticket_tags`, e uma migration adicional
-(008) relaxa a constraint `UNIQUE` do campo `email` na tabela `users`
-(o identificador primário é `keycloak_id`, não o e-mail).
+As 9 migrations da Stega (`migrations/1/` a `migrations/9/`, cada uma com
+`up.sql`/`down.sql` — ver [ADR-016](/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg))
+criam as tabelas `users`, `products`, `tickets`, `comments`, `events`, `tags` e
+`ticket_tags`; a migration 8 relaxa a constraint `UNIQUE` do campo `email` na
+tabela `users` (o identificador primário é `keycloak_id`, não o e-mail).
 
 ### 6. Popular com dados de exemplo
 
@@ -375,6 +408,12 @@ docker compose down -v
 | `perlbrew install` falha em testes | Suite de testes do interpretador falha por fatores do ambiente | Use `perlbrew --notest install perl-5.42.2` |
 | `DBD::Pg` falha ao instalar | Compilador C ausente | Use berrybrew (já inclui MinGW) ou Docker Compose |
 | Keycloak lento para iniciar | Primeira inicialização | Normal — aguarde ~45 segundos |
+| `berrybrew available` não lista a versão desejada | Cache local de versões desatualizado | Rode `berrybrew fetch` antes de `berrybrew available` |
+| `cpanm Carton` falha ao construir `Parse::PMFile` (ou outra dependência transitiva) | Suite de testes de uma dependência do Carton falha no ambiente, sem que o módulo deixe de funcionar | Use `cpanm --notest Carton` — confirmado funcional no Windows/berrybrew |
+| `Net::AMQP::RabbitMQ` falha ao instalar no Windows (`undefined reference to 'poll'`) | O módulo embute um cliente C (`rabbitmq-c`) que assume `poll()`, ausente no MinGW/Winsock — limitação real do pacote, não resolvível com `--notest`/`--force` | Use o Caminho C (Docker Compose) para o que depender desse módulo; o restante da aplicação funciona com Perl nativo, já que o módulo só é carregado por código de worker/notificação |
+| `perl`/`prove` sem `carton exec` "funciona" mesmo assim | Strawberry Perl empacota módulos comuns (ex.: `Moo`) em `perl/vendor/lib` — o comando acidentalmente usa essa cópia global em vez da versão travada no `cpanfile.snapshot` | Sempre prefixe `carton exec`; confirme com `carton exec perl -MMoo -e "print $INC{'Moo.pm'}"` — deve apontar para `local/lib/perl5`, nunca para `vendor/lib` |
+| `carton exec perl`/`carton exec prove` sai atrasado ou corrompido no Windows | Windows não tem `exec()` real, só emulação por spawn+wait — `carton exec` sempre adiciona uma camada de processo extra, o que afeta a sincronia de qualquer saída (não só `prove`); no `prove`, que usa retorno de carro (`\r`) para a linha de progresso, o mesmo problema aparece como texto sobreposto/corrompido em vez de só atrasado | Encadeie `\| Out-Host` em qualquer comando que imprime para o terminal: `carton exec perl eng\migrate.pl \| Out-Host`, `carton exec prove -lr t\ \| Out-Host` |
+| `\| Out-Host` corrige a sincronia mas os acentos saem corrompidos (`Vers├úo`) | `[Console]::OutputEncoding` do PowerShell normalmente não é UTF-8; o pipeline decodifica a saída (que já está em UTF-8 correto) com o codepage errado | Rode uma vez por sessão: `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; chcp 65001 \| Out-Null` |
 
 ---
 

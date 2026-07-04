@@ -19,18 +19,22 @@ O stack precisa de um mecanismo que:
 ## Decisão
 
 **OpenAPI v3** como especificação do contrato de API, em arquivo YAML (`api/stega.yaml`),
-usado como **artefato de documentação e revisão de código** — não como plugin de validação
-em runtime.
+carregado por **`Mojolicious::Plugin::OpenAPI`** — o plugin roteia as requisições, valida
+entrada e saída contra o schema, e aplica os esquemas de segurança declarados.
 
 A spec é a fonte da verdade do contrato: descreve todas as rotas, schemas de entrada e
-saída, parâmetros e esquemas de segurança. O roteamento e a validação de entrada são
-implementados explicitamente nos controladores Mojolicious.
+saída, parâmetros e esquemas de segurança. O roteamento usa a extensão `x-mojo-to` em
+cada operação — explícita, não inferida por convenção de nomes a partir do
+`operationId` — e cada ação de Controller confirma a validação com
+`$c->openapi->valid_input or return;` antes de tocar em qualquer lógica de negócio.
 
-**Nota sobre `Mojolicious::Plugin::OpenAPI`**: existe um plugin que lê o YAML e
-automatiza roteamento, validação e geração de Swagger UI. Ele é uma alternativa válida
-mas adiciona acoplamento entre o YAML e os `operationId` dos controladores. A Stega
-optou por separar os dois: o YAML documenta, o código valida. Projetos que preferem
-validação automática de entrada podem adotar o plugin sem mudar a spec.
+**Revisão 2026-07-04**: a versão original desta ADR previa o YAML como documentação
+pura, com validação manual nos controladores, e o plugin como adoção opcional. Na
+implementação real da Stega, o plugin acabou sendo adotado desde o início — a
+validação automática de request/response eliminou uma classe inteira de checagens
+manuais repetidas (campo obrigatório ausente, tipo errado, enum inválido) que, feitas
+à mão, tendiam a divergir sutilmente entre rotas. Esta revisão alinha a ADR ao que
+está de fato implementado e testado.
 
 ## Justificativa
 
@@ -109,13 +113,15 @@ components:
         error:
           type: string
 
+security:
+  - BearerAuth: []    # aplicado a toda rota por padrão; sobrescrito com security: [] onde não se aplica (ex.: webhooks)
+
 paths:
   /users:
     get:
       operationId: listUsers
+      x-mojo-to: "user#api_list"    # roteamento explícito — não inferido do operationId
       summary: Listar usuários
-      security:
-        - BearerAuth: []
       responses:
         "200":
           description: Lista de usuários
@@ -134,9 +140,8 @@ paths:
 
     post:
       operationId: createUser
+      x-mojo-to: "user#api_create"
       summary: Criar usuário
-      security:
-        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -162,9 +167,8 @@ paths:
   /users/{id}:
     get:
       operationId: showUser
+      x-mojo-to: "user#api_show"
       summary: Buscar usuário
-      security:
-        - BearerAuth: []
       parameters:
         - name: id
           in: path
@@ -189,66 +193,84 @@ paths:
 sub startup {
     my $self = shift;
 
-    # Registrar o plugin OpenAPI apontando para o arquivo de spec
     $self->plugin('OpenAPI', {
-        url    => $self->home->rel_file('api/openapi.yaml'),
+        url      => $self->home->child('api/openapi.yaml'),
+        schema   => 'v3',
         # Security handler: chamado para rotas com security: [BearerAuth]
+        # (declarado uma vez no nível raiz do YAML, herdado por toda rota —
+        # ver ADR-009 para a validação de JWT em si)
         security => {
             BearerAuth => sub {
                 my ($c, $definition, $scopes, $cb) = @_;
-                # Lógica de validação do JWT — ver ADR-009
-                return $c->$cb() if $c->_validate_jwt;
-                return $c->$cb('Unauthorized');
+
+                my $auth = $c->req->headers->authorization // '';
+                my ($token) = $auth =~ /^Bearer\s+(.+)$/i;
+                return $c->$cb('Autenticação necessária') unless $token;
+
+                my ($claims, $err) = $c->verify_jwt($token);
+                return $c->$cb('Token inválido') if $err;
+
+                $c->stash(current_user => { id => $claims->{sub}, role => $claims->{role} // 'customer' });
+                return $c->$cb(undef);
             },
         },
     });
 }
 ```
 
-### Controlador: sem validação manual de entrada
+### Controlador: confirma a validação, renderiza JSON normal
 
-Com o plugin registrado, o controlador recebe apenas requisições já validadas contra
-o schema. Parâmetros ausentes ou com tipo errado causam HTTP 400 automático:
+O plugin valida a requisição contra o schema **antes** de rotear para a ação — mas a
+ação ainda chama `$c->openapi->valid_input` explicitamente como primeira linha. Isso
+não é redundante: é o ponto em que, se a validação falhasse silenciosamente por
+alguma razão, a ação recusa continuar em vez de assumir que os dados estão bons.
+A resposta é `$c->render(json => ...)` normal — sem um helper especial de output:
 
 ```perl
 package MyApp::Controller::User;
-use Mojo::Base 'Mojolicious::Controller';
+use Mojo::Base 'Mojolicious::Controller', -strict;
 
-sub listUsers {
-    my $self  = shift;
-    my $users = $self->pg->db->query(
+sub api_list {
+    my $c = shift;
+    $c->openapi->valid_input or return;
+
+    my $users = $c->pg->db->query(
         'SELECT id, email, name FROM users ORDER BY id'
     )->hashes;
 
-    # openapi_reply: serializa e valida a resposta contra o schema de saída
-    $self->render(openapi => $users);
+    $c->render(json => { data => $users });
 }
 
-sub createUser {
-    my $self = shift;
-    my $data = $self->req->json;    # já validado pelo plugin
+sub api_create {
+    my $c    = shift;
+    $c->openapi->valid_input or return;
+    my $data = $c->req->json;    # já validado contra o schema da requestBody
 
-    my $user = $self->pg->db->query(
-        'INSERT INTO users (email, name) VALUES (?, ?) RETURNING id, email, name',
+    my $user = $c->pg->db->query(
+        'INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id, email, name',
         $data->{email}, $data->{name}
     )->hash;
 
-    $self->render(openapi => $user, status => 201);
+    $c->render(json => { data => $user }, status => 201);
 }
 ```
 
-### Mapeamento de operationId para controladores
+### Roteamento explícito via `x-mojo-to`
 
-O plugin usa o `operationId` do YAML para rotear para o método do controlador:
+Cada operação do YAML declara `x-mojo-to: "controller#action"` — roteamento
+explícito, não inferido de uma convenção de nomes a partir do `operationId`:
 
-| operationId | Mapeamento padrão |
-|-------------|------------------|
-| `listUsers` | `MyApp::Controller::User#listUsers` |
-| `createUser` | `MyApp::Controller::User#createUser` |
-| `showUser` | `MyApp::Controller::User#showUser` |
+| Rota | `operationId` (documentação) | `x-mojo-to` (roteamento real) |
+|------|------------------------------|-------------------------------|
+| `GET /users` | `listUsers` | `user#api_list` |
+| `POST /users` | `createUser` | `user#api_create` |
+| `GET /users/{id}` | `showUser` | `user#api_show` |
 
-A convenção é: prefixo da aplicação + `Controller` + nome antes do verbo em camelCase.
-Isso é configurável no plugin se outra convenção for preferida.
+O `operationId` continua existindo — é usado por ferramentas de geração de cliente e
+pela Swagger UI — mas não é o que decide qual método do Controller é chamado. Os dois
+podem até ter nomes diferentes sem problema (por isso a Stega usa `api_list`,
+`api_create` etc. nos Controllers — prefixo `api_` para diferenciar da ação web
+equivalente no mesmo Controller, como `list` vs `api_list`).
 
 ## Alternativas Consideradas
 
@@ -277,6 +299,7 @@ Isso é configurável no plugin se outra convenção for preferida.
 **Ações necessárias**:
 - Criar o diretório `api/` e o arquivo `api/stega.yaml` com o contrato completo das rotas
 - Manter a spec sincronizada com a implementação: toda rota nova ou alterada deve ter
-  o YAML correspondente atualizado no mesmo PR
-- (Opcional) Adicionar `Mojolicious::Plugin::OpenAPI` ao `cpanfile` e registrar no
-  `startup()` para projetos que queiram validação automática de entrada via schema
+  o YAML correspondente atualizado no mesmo PR, incluindo o `x-mojo-to`
+- Declarar `Mojolicious::Plugin::OpenAPI` no `cpanfile` (obrigatório, não opcional —
+  ver revisão 2026-07-04) e registrar no `startup()` com o security handler de JWT
+- Toda ação de Controller sob `/api/v1/*` começa com `$c->openapi->valid_input or return;`

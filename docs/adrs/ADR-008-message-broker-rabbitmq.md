@@ -16,9 +16,16 @@ aguardar o processamento. É necessário um message broker que:
 
 ## Decisão
 
-**RabbitMQ** como message broker, acessado pela API via **Mojo::RabbitMQ::Client**
-(publicação não-bloqueante) e pelos workers via **Net::AMQP::RabbitMQ** (consumo
-em loop síncrono em processo dedicado).
+**RabbitMQ** como message broker, acessado exclusivamente via **Net::AMQP::RabbitMQ**
+— tanto para publicar (dentro de jobs Minion, não na rota HTTP diretamente) quanto
+para consumir (worker dedicado, em loop síncrono).
+
+**Revisão 2026-07-04**: a versão original desta ADR previa `Mojo::RabbitMQ::Client`
+para publicação não-bloqueante direto no handler HTTP. Na implementação real, a rota
+HTTP nunca fala com o RabbitMQ diretamente — ela sempre enfileira um job no Minion
+(ver fluxo abaixo), e é o **job Minion** que publica, de forma síncrona, com
+`Net::AMQP::RabbitMQ`. `Mojo::RabbitMQ::Client` nunca chegou a ser usado; removido
+desta ADR para refletir o que está de fato implementado e testado.
 
 ## Justificativa
 
@@ -46,10 +53,14 @@ HTTP Handler → minion->enqueue('job_name', [...])
                                             NotificationWorker (consumidor)
 ```
 
-**Nota sobre publicação direta**: em casos onde a latência de enfileiramento Minion
-é inaceitável e a disponibilidade do RabbitMQ é garantida, é possível publicar
-diretamente com `Mojo::RabbitMQ::Client` (não-bloqueante) no handler HTTP. Essa
-abordagem elimina a etapa Minion mas perde a durabilidade da fila intermediária.
+**Por que sempre passar pelo Minion, nunca publicar direto do handler HTTP**: a
+latência extra de enfileirar (grava uma linha no Postgres, o worker Minion pega em
+seguida) é pequena e compensa a durabilidade — se o RabbitMQ estiver indisponível no
+momento da requisição, o job Minion continua na fila e é reprocessado quando o
+broker voltar. Publicar direto do handler HTTP eliminaria essa etapa, mas faria a
+requisição do usuário depender da disponibilidade do RabbitMQ no exato momento —
+inaceitável para uma ação como "criar ticket", que não deve falhar por causa de um
+serviço de notificação fora do ar.
 
 Workers são containers separados no Kubernetes: mesmo Deployment, mesma imagem Docker
 da API, apenas o `command` é diferente (aponta para o script do worker em vez do
@@ -85,68 +96,86 @@ services:
       retries: 5
 ```
 
-### Registro do helper no startup
+### Registro do Minion no startup
+
+Minion usa a mesma instância `Mojo::Pg` da aplicação — sem novo serviço de backing
+além do que a ADR-016 já declara:
 
 ```perl
-# lib/MyApp.pm (trecho — registro do helper rabbitmq)
-use Mojo::Base 'Mojolicious';
-use Mojo::RabbitMQ::Client;
-
+# lib/MyApp.pm (trecho)
 sub startup {
     my $self = shift;
 
-    # URL AMQP montada a partir das variáveis de ambiente
-    my $host = $ENV{RABBITMQ_HOST}     // 'localhost';
-    my $user = $ENV{RABBITMQ_USER}     // 'myapp';
-    my $pass = $ENV{RABBITMQ_PASSWORD} // 'dev_password';
-
-    my $rabbitmq = Mojo::RabbitMQ::Client->new(
-        url => "amqp://$user:$pass\@$host/"
-    );
-
-    $self->helper(rabbitmq => sub { $rabbitmq });
+    $self->_setup_database;   # $self->pg — ver ADR-016
+    $self->plugin('Minion', Pg => $self->pg);
+    $self->minion->add_task(publish_order_created => \&MyApp::Job::PublishOrderCreated::run);
 
     # ... rotas e outros helpers ...
 }
 ```
 
-### Publicação na API (não-bloqueante com Mojo::RabbitMQ::Client)
+### Controller: enfileira no Minion, não fala com o RabbitMQ
 
 ```perl
 # lib/MyApp/Controller/Order.pm
 package MyApp::Controller::Order;
-use Mojo::Base 'Mojolicious::Controller';
-use Mojo::JSON qw(encode_json);
+use Mojo::Base 'Mojolicious::Controller', -strict;
 
 sub create {
-    my $self  = shift;
-    my $order = $self->req->json;
+    my $c     = shift;
+    my $order = $c->req->json;
 
-    # Persistir o pedido no PostgreSQL (ADR-016)
-    my $created = $self->pg->db->query(
-        'INSERT INTO orders (user_id, total) VALUES (?, ?) RETURNING id',
+    my $created = $c->pg->db->query(
+        'INSERT INTO orders (user_id, total) VALUES ($1, $2) RETURNING id',
         $order->{user_id}, $order->{total}
     )->hash;
 
-    my $body = encode_json({
-        order_id => $created->{id},
-        user_id  => $order->{user_id},
-    });
+    # Enfileira — retorna imediatamente, o job roda no worker Minion (processo separado)
+    $c->minion->enqueue(publish_order_created => [$created->{id}]);
 
-    # Publicar evento de forma não-bloqueante via helper registrado no startup
-    $self->rabbitmq->open_channel->then(sub {
-        my $channel = shift;
-        $channel->publish(
-            exchange    => 'orders',
-            routing_key => 'order.created',
-            body        => $body,
-            props       => { delivery_mode => 2 },  # persistente
-        );
-    })->catch(sub { $self->app->log->error("AMQP publish failed: @_") });
-
-    # Retorna imediatamente — o worker processa em background
-    $self->render(json => { id => $created->{id} }, status => 202);
+    $c->render(json => { id => $created->{id} }, status => 202);
 }
+```
+
+### Job Minion: publica no RabbitMQ de forma síncrona
+
+```perl
+# lib/MyApp/Job/PublishOrderCreated.pm
+package MyApp::Job::PublishOrderCreated;
+use v5.42;
+use utf8;
+
+sub run {
+    my ($job, $order_id) = @_;
+    my $app = $job->app;
+
+    require Net::AMQP::RabbitMQ;
+    require Mojo::JSON;
+
+    my $mq = Net::AMQP::RabbitMQ->new;
+    eval {
+        $mq->connect(
+            $ENV{RABBITMQ_HOST} // 'localhost',
+            { user => $ENV{RABBITMQ_USER} // 'myapp', password => $ENV{RABBITMQ_PASSWORD} // 'dev_password', vhost => '/' }
+        );
+        $mq->channel_open(1);
+        $mq->exchange_declare(1, 'orders', { exchange_type => 'topic', durable => 1 });
+        $mq->publish(1, 'order.created', Mojo::JSON::encode_json({ order_id => $order_id }), {
+            exchange => 'orders',
+        });
+        $mq->disconnect;
+    };
+    warn "Falha ao publicar no RabbitMQ: $@" if $@;
+
+    $job->finish({ published => !$@ });
+}
+
+1;
+```
+
+A conexão AMQP é aberta e fechada a cada chamada — aceitável porque jobs Minion são
+esporádicos, não um loop de alta frequência. O `eval` garante que uma falha do
+RabbitMQ não derruba o worker Minion nem perde o job (ele pode ser reenfileirado).
 
 1;
 ```
@@ -251,7 +280,8 @@ spec:
 | **Minion** (Mojolicious job queue) | Excelente para casos simples: usa PostgreSQL (já no stack), integração nativa Mojo, interface de administração via plugin. Recomendado quando não há requisito de interoperabilidade AMQP — não rejeitado por inadequação, mas por ser menos adequado que RabbitMQ quando múltiplos produtores/consumidores e roteamento avançado são necessários |
 | **Redis Pub/Sub** | Sem persistência garantida de mensagens (at-most-once); mensagens publicadas enquanto não há consumidor são perdidas |
 | **Apache Kafka** | Complexidade operacional muito maior (Zookeeper/KRaft, particionamento, retenção de logs); adequado para streaming de alto volume, não para task queues de web services |
-| **AnyEvent::RabbitMQ** | Alternativa async para RabbitMQ em Perl, mas com manutenção incerta; Mojo::RabbitMQ::Client cobre a necessidade de publicação não-bloqueante com manutenção mais ativa |
+| **AnyEvent::RabbitMQ** | Alternativa async para RabbitMQ em Perl, mas com manutenção incerta; como a publicação sempre acontece dentro de um job Minion (não no handler HTTP), não há necessidade de um cliente AMQP não-bloqueante — `Net::AMQP::RabbitMQ` síncrono é suficiente e mais simples |
+| **`Mojo::RabbitMQ::Client`** (decisão original desta ADR) | Cliente AMQP não-bloqueante para publicar direto do handler HTTP. Nunca chegou a ser implementado — a publicação sempre passou pelo Minion (ver "Revisão 2026-07-04"), tornando um cliente async desnecessário: o job Minion já roda fora do ciclo de requisição/resposta. Reforça a rejeição: é um projeto morto — última release v0.3.1 em 2019-08-20, repositório arquivado pelo mantenedor em 2025-01-24 (somente leitura desde então) |
 
 ## Consequências
 

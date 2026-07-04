@@ -6,8 +6,9 @@ title: RabbitMQ
 # RabbitMQ
 
 > **Decisão**: RabbitMQ via AMQP 0-9-1 como message broker para comunicação
-> assíncrona entre serviços. `Mojo::RabbitMQ::Client` para publicação
-> não-bloqueante; `Net::AMQP::RabbitMQ` para consumo bloqueante em workers.
+> assíncrona entre serviços. Um único cliente, `Net::AMQP::RabbitMQ` (bloqueante),
+> usado tanto para publicar (dentro de jobs Minion, nunca direto do handler HTTP)
+> quanto para consumir (worker dedicado).
 > [ADR-008 — Message Broker RabbitMQ](/adrs/ADR-008-message-broker-rabbitmq)
 
 ---
@@ -26,15 +27,30 @@ comum.
 
 ---
 
-## Dois clientes, dois usos
+## Um cliente, dois papéis — nunca publicação direta do handler HTTP
 
-| Módulo | Tipo | Onde usar |
-|--------|------|-----------|
-| `Mojo::RabbitMQ::Client` | Não-bloqueante (assíncrono) | Publicação de mensagens a partir de controllers e jobs Minion |
-| `Net::AMQP::RabbitMQ` | Bloqueante (síncrono) | Consumo em workers dedicados (`NotificationWorker`) |
+A rota HTTP **nunca fala com o RabbitMQ**. Ela enfileira um job Minion; é o job
+(rodando no worker Minion, fora do ciclo de requisição/resposta) quem publica:
 
-Workers dedicados são processos separados — o bloqueio do loop não é um problema
-porque o processo existe apenas para consumir mensagens.
+```
+HTTP Handler → $c->minion->enqueue(...)
+                  ↓ (fila no Postgres)
+           Minion Worker → Net::AMQP::RabbitMQ → RabbitMQ Exchange
+                                                        ↓
+                                            NotificationWorker (consumidor)
+```
+
+| Papel | Onde roda | Bloqueia o quê? |
+|-------|-----------|------------------|
+| Publicar (dentro do job Minion) | Worker Minion, processo separado do web | Nada — não há requisição HTTP em andamento nesse processo |
+| Consumir | `NotificationWorker`, loop dedicado | Nada — o processo existe só para isso |
+
+Como a publicação nunca acontece dentro do processo que serve HTTP, não há event
+loop compartilhado para proteger — `Net::AMQP::RabbitMQ` (bloqueante) é suficiente
+nos dois papéis. Um cliente não-bloqueante (`Mojo::RabbitMQ::Client`, avaliado e
+descartado — ver ADR-008) resolveria um problema que esta arquitetura não tem, e
+carregaria o risco extra de ser um projeto sem manutenção (última release em 2019,
+repositório arquivado em 2025).
 
 ---
 
@@ -59,69 +75,84 @@ services:
 
 ---
 
-## Publicação não-bloqueante (Mojo::RabbitMQ::Client)
+## Publicar: dentro de um job Minion
 
 ```perl
-# lib/Stega/Controller/Ticket.pm
-package Stega::Controller::Ticket;
-use Mojo::Base 'Mojolicious::Controller';
-use Mojo::JSON qw(encode_json);
+# lib/Stega/Job/SendWelcomeNotification.pm
+package Stega::Job::SendWelcomeNotification;
+use v5.42;
+use utf8;
 
-sub update_status {
-    my $self = shift;
-    my $id   = $self->param('id');
-    my $body = $self->req->json;
-    my $new_status = $body->{status};
+sub run {
+    my ($job, $user_id) = @_;
+    my $app  = $job->app;
+    my $user = $app->pg->db->query('SELECT * FROM users WHERE id = $1', $user_id)->hash;
+    return $job->finish({ skipped => 'usuário não encontrado' }) unless $user;
 
-    # 1. Persistir no banco
-    $self->pg->db->update('tickets',
-        { status => $new_status, updated_at => \'now()' },
-        { id     => $id }
-    );
+    _publish_notification($app, 'ticket.welcome', {
+        user_id      => $user_id,
+        email        => $user->{email},
+        display_name => $user->{display_name},
+    });
 
-    # 2. Publicar evento no RabbitMQ (não-bloqueante)
-    $self->app->mq->publish_message(
-        exchange    => 'stega.notifications',
-        routing_key => 'ticket.status_changed',
-        body        => encode_json({
-            ticket_id  => $id,
-            new_status => $new_status,
-            actor_id   => $self->stash('jwt_claims')->{sub},
-        }),
-    );
+    $job->finish({ notified => $user->{email} });
+}
 
-    $self->render(json => { ok => 1 });
+sub _publish_notification {
+    my ($app, $routing_key, $payload) = @_;
+
+    require Net::AMQP::RabbitMQ;
+    require JSON::PP;
+
+    my $mq = Net::AMQP::RabbitMQ->new;
+    eval {
+        $mq->connect($ENV{RABBITMQ_HOST} // 'localhost', {
+            user     => $ENV{RABBITMQ_USER}     // 'stega',
+            password => $ENV{RABBITMQ_PASSWORD} // 'dev_password',
+            vhost    => $ENV{RABBITMQ_VHOST}    // '/',
+        });
+        $mq->channel_open(1);
+        $mq->exchange_declare(1, 'stega.notifications', { exchange_type => 'topic', durable => 1 });
+        $mq->publish(1, $routing_key, JSON::PP::encode_json($payload), {
+            exchange => 'stega.notifications',
+        });
+        $mq->disconnect;
+    };
+    warn "Falha ao publicar notificação: $@" if $@;
 }
 
 1;
 ```
 
-```perl
-# lib/Stega.pm — configuração do cliente RabbitMQ como helper
-use Mojo::RabbitMQ::Client;
+Note os `require` dentro da sub, não no topo do arquivo — carregamento preguiçoso.
+`Stega::Job::SendWelcomeNotification` compila sem `Net::AMQP::RabbitMQ` instalado; o
+módulo só é exigido quando o job de fato roda (relevante no Windows — ver
+"Armadilhas comuns" abaixo). A conexão abre e fecha a cada chamada — aceitável para
+jobs esporádicos.
 
-my $mq = Mojo::RabbitMQ::Client->new(
-    url => sprintf(
-        'amqp://%s:%s@%s',
-        $ENV{RABBITMQ_USER}     // 'stega',
-        $ENV{RABBITMQ_PASSWORD} // 'dev_password',
-        $ENV{RABBITMQ_HOST}     // 'localhost',
-    )
-);
-$self->helper(mq => sub { $mq });
+O Controller que enfileira este job nem sabe que RabbitMQ existe:
+
+```perl
+# lib/Stega/Controller/Auth.pm (trecho do callback de login)
+if ($user->{is_first_login}) {
+    $c->minion->enqueue(send_welcome_notification => [$user->{id}]);
+}
 ```
 
 ---
 
-## Consumo bloqueante (Net::AMQP::RabbitMQ)
+## Consumir: worker dedicado (`Net::AMQP::RabbitMQ`)
 
 ```perl
 # lib/Stega/Worker/NotificationWorker.pm
 package Stega::Worker::NotificationWorker;
-use strict;
-use warnings;
+use v5.42;
+use utf8;
+use open ':std', ':encoding(UTF-8)';
+$| = 1;
+
 use Net::AMQP::RabbitMQ;
-use Mojo::JSON qw(decode_json);
+use JSON::PP qw(decode_json);
 
 sub run {
     my $mq = Net::AMQP::RabbitMQ->new;
@@ -129,33 +160,26 @@ sub run {
     $mq->connect($ENV{RABBITMQ_HOST} // 'localhost', {
         user     => $ENV{RABBITMQ_USER}     // 'stega',
         password => $ENV{RABBITMQ_PASSWORD} // 'dev_password',
-        vhost    => '/',
+        vhost    => $ENV{RABBITMQ_VHOST}    // '/',
     });
-
     $mq->channel_open(1);
+    $mq->exchange_declare(1, 'stega.notifications', { exchange_type => 'topic', durable => 1 });
+    $mq->queue_declare(1, 'stega.notifications.dispatch', { durable => 1 });
+    $mq->queue_bind(1, 'stega.notifications.dispatch', 'stega.notifications', 'ticket.#');
+    $mq->queue_bind(1, 'stega.notifications.dispatch', 'stega.notifications', 'report.#');
+    $mq->consume(1, 'stega.notifications.dispatch');
 
-    # Declarar exchange (idempotente — seguro executar sempre)
-    $mq->exchange_declare(1, 'stega.notifications', {
-        exchange_type => 'topic',
-        durable       => 1,
-    });
+    say '[NotificationWorker] Aguardando mensagens. Ctrl+C para encerrar.';
 
-    # Fila durável e binding com wildcard
-    $mq->queue_declare(1, 'notifications', { durable => 1 });
-    $mq->queue_bind(1, 'notifications', 'stega.notifications', 'ticket.#');
-
-    $mq->consume(1, 'notifications');
-
-    # Loop de consumo — bloqueia o processo
-    while (my $msg = $mq->recv) {
+    while (my $msg = $mq->recv(0)) {
         eval {
             my $payload = decode_json($msg->{body});
-            _dispatch($msg->{routing_key}, $payload);
+            _dispatch($msg->{routing_key} // '', $payload);
             $mq->ack(1, $msg->{delivery_tag});
         };
-        if (my $err = $@) {
-            warn "Erro ao processar mensagem: $err";
-            $mq->nack(1, $msg->{delivery_tag}, 0, 1);  # requeue
+        if ($@) {
+            warn "[NotificationWorker] Erro ao processar mensagem: $@\n";
+            $mq->reject(1, $msg->{delivery_tag}, 0);    # sem requeue — erro permanente
         }
     }
 }
@@ -163,45 +187,46 @@ sub run {
 sub _dispatch {
     my ($routing_key, $payload) = @_;
 
-    if ($routing_key eq 'ticket.status_changed') {
-        _send_email($payload);
-    } elsif ($routing_key eq 'ticket.sla_breached') {
-        _send_slack_alert($payload);
-    } elsif ($routing_key eq 'ticket.comment_added') {
-        _notify_participants($payload);
-    }
+    my %handlers = (
+        'ticket.welcome'      => \&_notify_welcome,
+        'ticket.sla_breached' => \&_notify_sla_breach,
+        'report.weekly_ready' => \&_send_report_email,
+    );
+
+    my $handler = $handlers{$routing_key};
+    $handler ? $handler->($payload) : warn "[NotificationWorker] Routing key não mapeada: $routing_key\n";
 }
 
 1;
 ```
 
-```perl
-# eng/worker.pl — inicia o NotificationWorker
-use strict;
-use warnings;
-use lib 'lib';
-use Stega::Worker::NotificationWorker;
-
-Stega::Worker::NotificationWorker->run;
-```
+Diferente do job Minion, este worker mantém **uma conexão persistente** — faz
+sentido, porque roda em loop contínuo, não esporadicamente. Duas bindings
+(`ticket.#` e `report.#`) na mesma fila cobrem os dois prefixos de routing key que a
+Stega publica hoje. `reject(..., 0)` (sem requeue) assume erro permanente — se o
+tipo de falha justificasse retry, seria `reject(..., 1)`.
 
 ```bash
-# Iniciar o worker
+# eng/worker.pl — inicia o NotificationWorker
 carton exec perl eng/worker.pl
 ```
 
 ---
 
-## Routing keys da Stega
+## Routing keys publicadas hoje na Stega
 
-| Routing key | Publicado por | Consumido por |
-|-------------|--------------|--------------|
-| `ticket.status_changed` | Controller ao mudar status | NotificationWorker → e-mail ao autor |
-| `ticket.assigned` | Controller ao atribuir agente | NotificationWorker → e-mail ao agente |
-| `ticket.comment_added` | Controller ao adicionar comentário | NotificationWorker → e-mail aos participantes |
-| `ticket.sla_breached` | Job Minion `check_sla_breaches` | NotificationWorker → Slack do produto |
-| `ticket.resolved` | Controller ao resolver ticket | NotificationWorker → e-mail ao autor |
-| `report.weekly_ready` | Job Minion `generate_activity_report` | NotificationWorker → e-mail com relatório |
+| Routing key | Publicada por | Consumida por |
+|-------------|---------------|---------------|
+| `ticket.welcome` | Job Minion `send_welcome_notification` (primeiro login) | `NotificationWorker` → e-mail de boas-vindas |
+| `ticket.sla_breached` | Job Minion `check_sla_breaches` | `NotificationWorker` → alerta no Slack do produto |
+| `report.weekly_ready` | Job Minion `generate_activity_report` | `NotificationWorker` → e-mail com relatório |
+
+Mudanças de status, atribuição e comentários de ticket **não** passam pelo RabbitMQ —
+ficam registradas na tabela `events` (auditoria in-app, ver Guia 4/ADR-020), que é um
+mecanismo diferente com um propósito diferente (histórico consultável na UI, não
+notificação externa). Se um evento desses precisar virar notificação externa no
+futuro, o padrão é o mesmo do `ticket.welcome`: publicar de dentro do job Minion que
+já processa aquela ação.
 
 ---
 
@@ -215,11 +240,6 @@ carton exec perl eng/worker.pl
 | Reprocessamento com backoff | ✅ nativo | configuração manual |
 | Sem serviço externo adicional | ✅ usa o PostgreSQL existente | ❌ serviço separado |
 
-Na Stega, o Minion lida com `send_welcome_notification`, `check_sla_breaches`,
-`process_webhook_payload` e `generate_activity_report`. O RabbitMQ recebe os eventos
-que os jobs Minion publicam para que o `NotificationWorker` possa consumi-los
-de forma totalmente desacoplada.
-
 ---
 
 ## Armadilhas comuns
@@ -227,7 +247,8 @@ de forma totalmente desacoplada.
 | Armadilha | Descrição | Como evitar |
 |-----------|-----------|-------------|
 | Exchange não declarado no consumer | Se a aplicação caiu antes de declarar, o consumer falha | Declare exchanges no worker também (idempotente) |
-| Mensagem sem ack em caso de erro | Mensagem fica "unacked" e bloqueia a fila | Sempre `ack` ou `nack` — use `eval` para garantir |
-| `Net::AMQP::RabbitMQ` em Mojolicious | Bloqueante — paralisa o event loop | Use `Mojo::RabbitMQ::Client` para publicação; `Net::AMQP` apenas em workers isolados |
+| Mensagem sem ack em caso de erro | Mensagem fica "unacked" e bloqueia a fila | Sempre `ack` ou `reject` — use `eval` para garantir |
+| Publicar direto de um Controller | Acopla a resposta HTTP à disponibilidade do RabbitMQ | Sempre publique de dentro de um job Minion — ver seção acima |
 | Fila não-durável | Reinicialização do RabbitMQ apaga a fila e mensagens pendentes | Declare filas com `durable => 1` em produção |
 | Routing key muito genérica | `#` consome tudo do exchange, incluindo mensagens não intencionais | Seja específico: `ticket.#` em vez de `#` |
+| `Net::AMQP::RabbitMQ` não instala no Windows | Módulo embute cliente C que assume `poll()`, ausente no MinGW/Winsock | Rode o worker via Docker Compose no Windows — o resto da app funciona com Perl nativo |

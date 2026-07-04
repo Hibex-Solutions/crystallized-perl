@@ -154,7 +154,7 @@ Descrição de uma linha.
 
 - Docker e Docker Compose
 - Perl 5.42+ (via perlbrew ou berrybrew — ver DEVELOPMENT.md)
-- Carton (`cpanm Carton`)
+- Carton (`cpanm --notest Carton`)
 
 ## Executando localmente
 
@@ -224,9 +224,10 @@ perlbrew switch perl-5.42.2
 
 **Windows — berrybrew**
 
-Consulte a documentação oficial: https://github.com/dnmfarrell/berrybrew
+Consulte a documentação oficial: https://github.com/stevieb9/berrybrew
 
 ```powershell
+berrybrew fetch             # atualiza a lista de versões disponíveis
 berrybrew install 5.42.2_64
 berrybrew switch 5.42.2_64
 ```
@@ -234,7 +235,7 @@ berrybrew switch 5.42.2_64
 ## 3. Instalando as dependências do projeto
 
 ```bash
-cpanm Carton           # instalar o Carton globalmente
+cpanm --notest Carton  # instalar o Carton globalmente
 carton install         # instalar dependências declaradas no cpanfile
 ```
 
@@ -279,16 +280,11 @@ carton exec perl script/my_app.pl daemon # aplicação em modo de desenvolviment
 
 ## 6. Fluxo de trabalho
 
-Scripts auxiliares em `eng/` (ver ADR-013):
+Scripts auxiliares em `eng/` (ver ADR-013) — mesmo comando em qualquer plataforma:
 
 ```bash
-# Linux/macOS
-perl eng/migrate.pl     # aplicar migrations
-perl eng/seed.pl        # popular banco para desenvolvimento
-
-# Windows (PowerShell)
-.\eng\migrate.ps1
-.\eng\seed.ps1
+carton exec perl eng/migrate.pl     # aplicar migrations
+carton exec perl eng/seed.pl        # popular banco para desenvolvimento
 ```
 
 ## 7. Rodando os testes

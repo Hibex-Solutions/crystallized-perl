@@ -157,6 +157,11 @@ requires 'perl', '5.042';
 # Framework web (ADR-004)
 requires 'Mojolicious', '9.0';
 
+# Contrato de API OpenAPI v3 (ADR-015) — faixa travada abaixo da versão que
+# introduziu uma dependência XS (Net::IDN::Encode) incompatível com Perl 5.42
+requires 'Mojolicious::Plugin::OpenAPI', '>= 5.11, < 5.12';
+requires 'JSON::Validator',              '>= 5.13, < 5.16';
+
 # Acesso a banco de dados (ADR-016)
 requires 'Mojo::Pg', '4.0';
 
@@ -186,6 +191,15 @@ on 'test' => sub {
     requires 'Devel::Cover', '1.38';
 };
 ```
+
+:::info Números de versão no cpanfile são mínimos, não exatos
+`requires 'Mojolicious', '9.0';` significa "9.0 ou mais recente" — o `carton install`
+instala a versão mais nova disponível que satisfaça essa condição. A fixação exata de
+versão acontece no `cpanfile.snapshot` (próximo passo), não no `cpanfile`. Quando um
+teto de versão é necessário — como no caso do `Mojolicious::Plugin::OpenAPI` acima —
+use a sintaxe de intervalo: `'>= 5.11, < 5.12'`. Ver [ADR-005](/adrs/ADR-005-gerenciamento-de-dependencias)
+para a explicação completa.
+:::
 
 ---
 
@@ -242,7 +256,7 @@ Perl do sistema). Dependências são gerenciadas pelo Carton. Serviços de apoio
 
 - Docker Desktop 4.28+
 - Perl 5.42.2 via perlbrew (Linux/macOS) ou berrybrew (Windows)
-- Carton: `cpanm Carton`
+- Carton: `cpanm --notest Carton`
 
 ## Setup inicial
 
@@ -353,7 +367,7 @@ Resultado esperado:
 | `local/` | Módulos instalados pelo Carton (não commitado) | [ADR-005](/adrs/ADR-005-gerenciamento-de-dependencias) |
 | `DEVELOPMENT.md` | Guia de configuração inicial para novos contribuidores | [ADR-012](/adrs/ADR-012-estrutura-minima-de-projeto) |
 | `lib/` | Código Perl da aplicação (namespaces `Stega::`) | [ADR-004](/adrs/ADR-004-framework-web-mojolicious) |
-| `migrations/` | Arquivos SQL de migration (`NNN_descricao.sql`) | [ADR-016](/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg) |
+| `migrations/` | Uma pasta por versão (`N/up.sql`, `N/down.sql`), via `from_dir` | [ADR-016](/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg) |
 | `script/` | Ponto de entrada Mojolicious | [ADR-004](/adrs/ADR-004-framework-web-mojolicious) |
 | `t/` | Testes com prefixo numérico (`NNN_nome.t`); helpers de teste em `t/lib/` | [ADR-011](/adrs/ADR-011-estrategia-de-testes) |
 | `eng/` | Scripts de engenharia em Perl | [ADR-013](/adrs/ADR-013-scripts-de-engenharia) |

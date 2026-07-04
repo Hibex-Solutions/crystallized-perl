@@ -52,6 +52,13 @@ API → valida token localmente com chave pública do Keycloak (JWKS)
 API → extrai claims (sub, email, roles) do payload do JWT
 ```
 
+**Atenção**: as roles (`realm_access.roles`) devem ser extraídas do **access_token**,
+não do `id_token`. Por padrão, o Keycloak não inclui `realm_access` no `id_token` — só
+no `access_token`. Aplicações que fazem login via authorization code flow (fluxo web,
+não apenas M2M) e usam apenas o `id_token` para montar a sessão do usuário não terão
+as roles disponíveis. A Stega troca o `code` por ambos os tokens no callback, mas
+sempre decodifica o **access_token** para obter `realm_access.roles`.
+
 ### Fluxo machine-to-machine (workers e microserviços)
 
 ```
@@ -259,6 +266,8 @@ do container, eliminando a necessidade de reconfiguração a cada `docker compos
 | **Token Introspection (chamada ao Keycloak por requisição)** | Latência adicional em cada requisição; Keycloak vira single point of failure síncrono da API |
 | **Dex** | Alternativa open source ao Keycloak, mas com menor ecossistema e sem interface administrativa madura |
 | **HTTP Basic Auth** | Sem suporte a tokens de curta duração, sem RBAC integrado, sem M2M; insuficiente para arquitetura cloud-native |
+| **Mojolicious::Plugin::OAuth2** | Plugin genérico de cliente OAuth2/OIDC: descobre `authorize_url`/`token_url` via `well_known_url` e oferece um helper `jwt_decode`. Reduziria o código manual de `login`/`callback` (troca de `code` por token). Avaliado e rejeitado por ora: o fluxo de autorização já implementado (redirect + troca de código + validação via JWKS) tem ~40 linhas, é auditável linha a linha e já resolve o caso conhecido de `id_token` sem `realm_access.roles` (ver nota abaixo). Adotar o plugin trocaria código já testado por uma dependência nova cujo comportamento de cache/renovação de JWKS e de armazenamento de token precisaria ser revalidado do zero — sem redução real de complexidade |
+| **Mojolicious::Plugin::OIDC** | Implementação mais completa do protocolo OIDC (descoberta, PKCE, gestão de sessão). Mesma razão de rejeição do OAuth2: a Stega já usa validação local via JWKS com `Crypt::JWT` (necessária de qualquer forma para as rotas de API, que recebem apenas o `Authorization: Bearer`, sem fluxo de redirect) — introduzir um segundo mecanismo de validação apenas para o fluxo web duplicaria lógica em vez de reutilizá-la |
 
 ## Consequências
 

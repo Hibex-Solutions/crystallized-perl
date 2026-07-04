@@ -119,9 +119,16 @@ $r->any(['GET', 'HEAD'] => '/ping')->to(cb => sub {
 
 ## Controllers
 
+Exemplo genérico — ilustra a forma de um Controller Mojolicious, não uma cópia do
+Controller real da Stega. O real (`Stega::Controller::Ticket`) usa placeholders
+posicionais (`$1`, `$2`, o estilo que `DBD::Pg` espera, não `?`) e, desde a extensão do
+padrão Domain + Repository (ver [ADR-020](/adrs/ADR-020-dominio-e-repository) e
+[Mojo::Pg](/stack/mojo-pg)), não chama `$c->pg->db` diretamente — delega a uma classe
+`Stega::Repository::Pg::Ticket`.
+
 ```perl
-# lib/Stega/Controller/Ticket.pm
-package Stega::Controller::Ticket;
+# lib/MyApp/Controller/Ticket.pm
+package MyApp::Controller::Ticket;
 use Mojo::Base 'Mojolicious::Controller';
 
 sub list {
@@ -133,8 +140,8 @@ sub list {
 
     # Acesso ao banco (configurado no startup como helper)
     my $tickets = $self->pg->db->query(
-        'SELECT id, title, status FROM tickets WHERE status = ?', $status
-    )->hashes->to_array;
+        'SELECT id, title, status FROM tickets WHERE status = $1', $status
+    )->hashes;
 
     $self->render(json => $tickets);
 }
@@ -144,7 +151,7 @@ sub show {
     my $id   = $self->param('id');    # parâmetro de rota :id
 
     my $ticket = $self->pg->db->query(
-        'SELECT * FROM tickets WHERE id = ?', $id
+        'SELECT * FROM tickets WHERE id = $1', $id
     )->hash;
 
     return $self->render(json => { error => 'not_found' }, status => 404)
@@ -158,9 +165,9 @@ sub create {
     my $body = $self->req->json;      # body JSON da requisição
 
     # Validação pelo plugin OpenAPI acontece antes deste método ser chamado
-    my $id = $self->pg->db->insert('tickets',
-        { title => $body->{title}, body => $body->{body}, status => 'open' },
-        { returning => 'id' }
+    my $id = $self->pg->db->query(
+        'INSERT INTO tickets (title, body, status) VALUES ($1, $2, $3) RETURNING id',
+        $body->{title}, $body->{body}, 'open'
     )->hash->{id};
 
     $self->render(json => { id => $id }, status => 201);

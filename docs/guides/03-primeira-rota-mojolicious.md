@@ -5,8 +5,9 @@ title: "Guia 3 — Primeira Rota com Mojolicious"
 
 # Guia 3 — Primeira Rota com Mojolicious
 
-> **Referência arquitetural**:
-> [ADR-004 — Framework Web Mojolicious](/adrs/ADR-004-framework-web-mojolicious)
+> **Referências arquiteturais**:
+> [ADR-004 — Framework Web Mojolicious](/adrs/ADR-004-framework-web-mojolicious) ·
+> [ADR-019 — Cabeçalho Padrão de Código Perl](/adrs/ADR-019-cabecalho-padrao-de-codigo-perl)
 
 ---
 
@@ -60,7 +61,7 @@ Veja [ADR-006](/adrs/ADR-006-sistema-de-oo-moo) e
 ```perl
 # lib/Stega.pm
 package Stega;
-use Mojo::Base 'Mojolicious';
+use Mojo::Base 'Mojolicious', -strict;
 
 sub startup {
     my $self = shift;
@@ -85,6 +86,12 @@ sub startup {
 após inicializar seu próprio estado interno. Configurar rotas e plugins em `new()`
 causa erros difíceis de diagnosticar.
 
+**Por que `-strict` e não `use v5.42;`?** `Mojo::Base` com a flag `-strict` já ativa
+`strict`, `warnings`, `utf8` e a feature bundle da versão do Perl em execução —
+o mesmo efeito de `use v5.42;` mais `use utf8;`, sem repetir nada. Esse é o único
+caso em que o cabeçalho padrão de ADR-019 (`use v5.42; use utf8;`) não se aplica:
+qualquer arquivo que herde de `Mojo::Base` já está coberto.
+
 ---
 
 ## Passo 2 — Script de entrada: script/stega
@@ -92,7 +99,10 @@ causa erros difíceis de diagnosticar.
 ```perl
 #!/usr/bin/env perl
 # script/stega
-use Mojo::Base -strict;
+use v5.42;
+use utf8;
+use open ':std', ':encoding(UTF-8)';
+$| = 1;
 
 use lib 'lib';
 use Stega;
@@ -116,7 +126,7 @@ linha de comando (`daemon`, `hypnotoad`, `minion`, `routes`, etc.).
 ```perl
 # lib/Stega/Controller/Health.pm
 package Stega::Controller::Health;
-use Mojo::Base 'Mojolicious::Controller';
+use Mojo::Base 'Mojolicious::Controller', -strict;
 
 sub check {
     my $self = shift;
@@ -137,7 +147,7 @@ A convenção de nomenclatura Mojolicious mapeia `'health#check'` para:
 ```perl
 # lib/Stega/Controller/Ticket.pm
 package Stega::Controller::Ticket;
-use Mojo::Base 'Mojolicious::Controller';
+use Mojo::Base 'Mojolicious::Controller', -strict;
 
 sub list {
     my $self = shift;
@@ -198,8 +208,10 @@ O nome após o número descreve o que é testado:
 
 ```perl
 # t/001_health.t
-use strict;
-use warnings;
+use v5.42;
+use utf8;
+use open ':std', ':encoding(UTF-8)';
+$| = 1;
 use Test::More;
 use Test::Mojo;
 
@@ -214,8 +226,10 @@ done_testing;
 
 ```perl
 # t/010_tickets_api.t
-use strict;
-use warnings;
+use v5.42;
+use utf8;
+use open ':std', ':encoding(UTF-8)';
+$| = 1;
 use Test::More;
 use Test::Mojo;
 
@@ -311,8 +325,9 @@ crystallized-perl-stega/
 
 | Padrão | Por quê |
 |--------|---------|
-| `use Mojo::Base -strict` em scripts | Ativa `strict`, `warnings` e `utf8` em uma linha |
-| Controllers herdam `Mojolicious::Controller` | Dá acesso a `$self->render`, `$self->param`, `$self->stash` |
+| `use v5.42; use utf8;` em scripts e módulos sem `Mojo::Base` | Padrão do stack (ADR-019) — `Mojo::Base` já cobre os arquivos que herdam dele |
+| `use open ':std', ':encoding(UTF-8)'; $\| = 1;` em `eng/*.pl`, `t/*.t` e `script/*` | Evita avisos `Wide character in print` e saída retida em buffer até o processo terminar (ADR-019, revisão 2026-07-02) |
+| Controllers herdam `Mojolicious::Controller` via `Mojo::Base '...', -strict` | Dá acesso a `$self->render`, `$self->param`, `$self->stash`, e já aplica `strict`/`warnings`/`utf8` |
 | Modelos de domínio usam `Moo` | Separação de responsabilidades — controllers são thin adapters |
 | `GET /healthz` sempre presente | Kubernetes usa para Liveness e Readiness Probes |
 | API sob `/api/v1` | Permite versionar sem quebrar clientes existentes |
@@ -331,3 +346,5 @@ Explore agora:
 - [**Stack — Mojolicious**](/stack/mojolicious): referência rápida do framework
 - [**ADR-004**](/adrs/ADR-004-framework-web-mojolicious): os critérios de escolha
   do Mojolicious sobre Catalyst, Dancer2 e Plack/PSGI
+- [**ADR-019**](/adrs/ADR-019-cabecalho-padrao-de-codigo-perl): o padrão de
+  cabeçalho Perl usado em todo o restante do código

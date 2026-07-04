@@ -368,14 +368,45 @@ nova com referência externa, proposta pelo usuário.
 Follow this sequence when resuming work on this project:
 
 1. Re-read this file in full.
-2. Check `docs/adrs/` to understand what has already been decided. As of 2026-06-27
-   existem ADR-000 a ADR-018 cobrindo todo o stack. Não há mais decisões TBD.
+2. Check `docs/adrs/` to understand what has already been decided. As of 2026-07-03
+   existem ADR-000 a ADR-021 cobrindo todo o stack. ADR-019 define o cabeçalho padrão
+   de código Perl; ADR-020 define o padrão Domain + Repository (validação de negócio
+   com estado, complementar à Policy da ADR-011); ADR-021 define `Stega::Config`,
+   módulo único de leitura de variáveis de ambiente (usado tanto pela app via
+   `$app->config` quanto por scripts sem instância de app via
+   `Stega::Config::load()`) — as três adicionadas durante a reconciliação
+   pós-implementação da Stega. ADR-008 e ADR-015 foram revisadas em
+   2026-07-04 para corrigir divergências entre a decisão registrada e a implementação
+   real (ADR-008 previa `Mojo::RabbitMQ::Client`, nunca usado — publicação sempre via
+   job Minion; ADR-015 previa validação manual, mas o plugin
+   `Mojolicious::Plugin::OpenAPI` sempre foi usado para validação automática). Não há
+   mais decisões TBD.
 3. Check `docs/references/` to understand what sources are in play (36 fontes).
 4. Ask the user what they want to work on before creating files.
 5. If the user provides new reference URLs, create reference files first,
    then link them from relevant ADRs/guides.
-6. Todas as decisões de stack estão tomadas. A próxima fase é escrever guias
-   de usuário em `docs/guides/`, usando a Stega (ADR-018) como aplicação de referência.
+6. Todas as decisões de stack estão tomadas, e a trilha completa de guias de usuário
+   em `docs/guides/` está escrita (1–9: ambiente, estrutura mínima, primeira rota,
+   modelos de domínio/regras de negócio, banco de dados, autenticação Keycloak,
+   contrato OpenAPI, RabbitMQ/Minion, containerização/deployment) — todos usando a
+   Stega (ADR-018) como aplicação de referência. Em 2026-07-03 o padrão Domain +
+   Repository (ADR-020) foi replicado do piloto em `Product` para `Ticket` e
+   `Comment` na Stega, com um ajuste de escopo em relação ao piloto original: o
+   Repository passou a cobrir todo o acesso a dados (leituras e escritas), não só
+   as escritas com validação — ver "Revisão 2026-07-03" na ADR-020. No mesmo dia,
+   `Product` também foi retrofitado (`index`/`update`/`api_list` migrados para
+   `Stega::Repository::Pg::Product`), e depois `Stega::Repository::User` (novo) +
+   `Stega::Controller::Auth`/`User`/`Dashboard` — achado real nessa última etapa:
+   `Auth.pm` tinha duas implementações divergentes do mesmo upsert de usuário a
+   partir do JWT (uma atômica via `ON CONFLICT`, outra via `SELECT`+`UPDATE`/`INSERT`
+   separados e sujeita a corrida), unificadas em
+   `Stega::Repository::Pg::User::upsert_from_keycloak` usando o idioma `xmax = 0`
+   do Postgres para detectar inserção vs. atualização dentro do próprio
+   `RETURNING`. Todos os Controllers que acessam entidades (`Product`, `Ticket`,
+   `Comment`, `User`, via `Auth`/`User`/`Dashboard`) não chamam `$c->pg->db`
+   diretamente. Só restam `Health` (`SELECT 1`, checagem de conectividade — não é
+   entidade) e `Webhook` (não toca banco) com SQL direto, e nenhum dos dois é
+   candidato ao padrão.
 7. Never add files to the repository root that are not listed in the
    Repository Structure section without asking first.
 

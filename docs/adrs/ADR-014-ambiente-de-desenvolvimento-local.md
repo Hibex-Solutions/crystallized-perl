@@ -70,16 +70,33 @@ perl -v
 
 # Instalar o cpanm e depois o Carton
 perlbrew install-cpanm
-cpanm Carton
+cpanm --notest Carton
 ```
 
 ### Setup com berrybrew (Windows)
 
-```powershell
-# Instalar o berrybrew (via repositório GitHub ou instalador)
-# https://github.com/dnmfarrell/berrybrew
+O berrybrew original (`dnmfarrell/berrybrew`) teve sua manutenção transferida para
+Steve Bertrand — **`stevieb9/berrybrew`** é o repositório oficial e ativamente mantido
+hoje; o próprio README do repositório original aponta para lá. Use sempre
+`stevieb9/berrybrew` como fonte de instalação.
 
-# Listar versões disponíveis do Strawberry Perl
+A instalação não é feita via `cpanm`/CPAN (berrybrew gerencia o próprio Perl, então
+não pode depender de um Perl já instalado). Duas formas suportadas:
+
+```powershell
+# Opção A — instalador (mais simples): baixar e executar berrybrewInstaller.exe
+# a partir de https://github.com/stevieb9/berrybrew
+
+# Opção B — clonar o repositório e configurar o PATH manualmente
+# (execute como Administrador — berrybrew precisa alterar o PATH de sistema)
+git clone https://github.com/stevieb9/berrybrew
+cd berrybrew
+bin\berrybrew.exe config
+
+# Atualizar e listar versões disponíveis do Strawberry Perl
+# (fetch é necessário — o cache local de versões geralmente está desatualizado
+# numa instalação nova e não mostra versões recentes sem essa atualização)
+berrybrew fetch
 berrybrew available
 
 # Instalar a versão escolhida
@@ -91,8 +108,9 @@ berrybrew switch 5.42.2_64
 # Verificar
 perl -v
 
-# Instalar Carton
-cpanm Carton
+# Instalar Carton — --notest evita que a suíte de testes de uma dependência
+# transitiva (ex.: Parse::PMFile) bloqueie a instalação por falhas do ambiente
+cpanm --notest Carton
 ```
 
 ### Setup com Docker Compose (recomendado para paridade máxima)

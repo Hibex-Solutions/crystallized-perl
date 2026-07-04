@@ -18,22 +18,50 @@ mantém a equipe em um único ecossistema de ferramentas.
 
 ## Decisão
 
-Scripts de engenharia do projeto residem em `eng/` e são escritos em **Perl**:
-
-- **Linux / macOS**: scripts executados diretamente via `shebang`
-- **Windows (PowerShell)**: wrapper `.ps1` que delega ao script `.pl` correspondente
-
-A estrutura de arquivos segue a convenção:
+Scripts de engenharia do projeto residem em `eng/` e são escritos em **Perl**, com um
+único ponto de entrada por script — sem wrapper `.ps1` por plataforma (ver
+"Revisão 2026-07-01" abaixo):
 
 ```
 eng/
 ├── migrate.pl       ← aplicar migrations pendentes
-├── migrate.ps1      ← wrapper Windows para migrate.pl
 ├── seed.pl          ← popular banco com dados de desenvolvimento
-├── seed.ps1
-├── setup.pl         ← verificar e configurar o ambiente local
-└── setup.ps1
+└── setup.pl         ← verificar e configurar o ambiente local
 ```
+
+Todo script é invocado da mesma forma em qualquer sistema operacional:
+
+```bash
+carton exec perl eng/migrate.pl
+```
+
+### Revisão 2026-07-01 — remoção do wrapper `.ps1`
+
+A versão original desta ADR previa um wrapper `eng/<script>.ps1` de três linhas por
+script, delegando ao `.pl` correspondente, com o objetivo de dar ao Windows uma
+ergonomia parecida com `./eng/migrate.pl` do Unix. Na prática, isso se mostrou uma
+camada sem benefício real e com um risco concreto:
+
+- O comando documentado e efetivamente usado no dia a dia (`DEVELOPMENT.md`, CI,
+  `Dockerfile`, InitContainer do Kubernetes) sempre foi `carton exec perl eng/script.pl`
+  — o mesmo comando em qualquer plataforma. O wrapper nunca era o caminho principal,
+  apenas um atalho alternativo documentado "ou".
+- `perl eng\migrate.pl` já funciona nativamente em qualquer shell do Windows
+  (PowerShell ou `cmd.exe`) sem exigir wrapper algum — a suposta necessidade de
+  paridade Unix/Windows não se sustenta, já que o Perl em si já é a camada
+  multiplataforma.
+- O wrapper implementado na Stega (`perl "$PSScriptRoot\migrate.pl" @args`) **não**
+  prefixava `carton exec` — divergindo do comando documentado e do único caminho que
+  garante o uso das dependências isoladas em `local/` (ver ADR-005). Um desenvolvedor
+  que confiasse no wrapper por engano rodaria o script contra módulos globais do
+  sistema, se existirem, produzindo comportamento não determinístico e difícil de
+  diagnosticar.
+- Cada script novo exige manter dois arquivos sincronizados manualmente (`.pl` e
+  `.ps1`), dobrando o número de arquivos em `eng/` sem dobrar a funcionalidade.
+
+**Decisão revisada**: eliminar o padrão de wrapper `.ps1`. Todo script de engenharia
+tem um único arquivo `.pl`, sempre invocado com `carton exec perl eng/<script>.pl` —
+comando idêntico em Linux, macOS e Windows.
 
 ## Justificativa
 
@@ -68,33 +96,38 @@ garante que o script sempre rode com a versão declarada em `cpanfile`.
 scripts (`perlbrew switch` ou `berrybrew switch`). Este requisito é documentado em
 `DEVELOPMENT.md` (ver ADR-012).
 
-### Wrapper PowerShell
+### Cabeçalho padrão
 
-O wrapper `.ps1` é minimalista: apenas delega ao script `.pl`, passando todos os
-argumentos recebidos:
+Todo script em `eng/` segue o cabeçalho definido em ADR-019 — `use v5.42;` habilita
+`strict`/`warnings` implicitamente, `use open ':std', ':encoding(UTF-8)';` garante
+que a saída impressa em `STDOUT`/`STDERR` seja codificada corretamente em qualquer
+terminal, e `$| = 1;` desliga o buffering dessa saída (sem isso, a camada de
+`:encoding` pode reter a saída em bloco até o processo terminar em vez de
+imprimi-la conforme é gerada):
 
-```powershell
-# eng/migrate.ps1
-# Wrapper Windows: delega ao script Perl correspondente
-perl "$PSScriptRoot\migrate.pl" @args
+```perl
+use v5.42;
+use utf8;
+use open ':std', ':encoding(UTF-8)';
+$| = 1;
 ```
-
-`$PSScriptRoot` garante que o caminho seja absoluto independentemente de onde o
-usuário está no terminal. `@args` repassa todos os argumentos sem modificação.
 
 ### Exemplo: script de migration
 
 O script usa `POSTGRESQL_MIGRATION_URL` (credencial DDL, com privilégios de CREATE/ALTER/DROP)
-e carrega todos os arquivos `migrations/*.sql` em ordem lexicográfica via `Mojo::File`
-(ver ADR-016 para a convenção de múltiplos arquivos e separação de credenciais):
+e delega ao `Mojo::Pg::Migrations->from_dir` nativo — nenhum loader customizado
+(ver ADR-016 para a convenção de diretórios e separação de credenciais):
 
 ```perl
 #!/usr/bin/env perl
 # eng/migrate.pl — aplica migrations pendentes ao banco
 
 use v5.42;
-use lib 'lib';
-use Mojo::File qw(path);
+use utf8;
+use open ':std', ':encoding(UTF-8)';
+$| = 1;
+use FindBin;
+use lib "$FindBin::Bin/../lib";
 use Mojo::Pg;
 
 my $pg = Mojo::Pg->new(
@@ -102,17 +135,12 @@ my $pg = Mojo::Pg->new(
         // 'postgresql://myapp_migrate:dev_password@localhost/myapp'
 );
 
-# Carrega e concatena todos os arquivos .sql em ordem lexicográfica
-my $sql = path('migrations')->list
-    ->grep(sub { /\.sql$/ })
-    ->sort
-    ->map(sub  { $_->slurp })
-    ->join("\n");
-
-$pg->migrations->name('myapp')->from_string($sql)->migrate;
+my $migrations = $pg->migrations->name('myapp')
+    ->from_dir("$FindBin::Bin/../migrations");
+$migrations->migrate;
 
 say 'Migrations aplicadas com sucesso.';
-say 'Versão atual: ' . $pg->migrations->version;
+say 'Versão atual: ' . $migrations->active;
 ```
 
 ### Exemplo: script de seed (dados de desenvolvimento)
@@ -122,6 +150,9 @@ say 'Versão atual: ' . $pg->migrations->version;
 # eng/seed.pl — popula o banco com dados para desenvolvimento local
 
 use v5.42;
+use utf8;
+use open ':std', ':encoding(UTF-8)';
+$| = 1;
 use lib 'lib';
 use Mojo::Pg;
 
@@ -153,6 +184,9 @@ say 'Dados de desenvolvimento inseridos.';
 # eng/setup.pl — verifica se o ambiente local está configurado corretamente
 
 use v5.42;
+use utf8;
+use open ':std', ':encoding(UTF-8)';
+$| = 1;
 
 my @checks = (
     [ 'Perl >= 5.42'   => sub { $] >= 5.042 } ],
@@ -180,7 +214,6 @@ exit($ok ? 0 : 1);
 | Convenção | Exemplo |
 |-----------|---------|
 | Nome em kebab-case | `eng/generate-report.pl` |
-| Wrapper com mesmo nome | `eng/generate-report.ps1` |
 | Verbo no nome (ação clara) | `migrate`, `seed`, `setup`, `check`, `generate` |
 | Idempotente quando possível | re-executar sem efeitos colaterais indesejados |
 | Saída informativa no stdout | `say "Ação concluída."` |
@@ -213,24 +246,24 @@ Referências: [Perlbrew](../references/perlbrew.md),
 | **npm scripts (package.json)** | Introduz Node.js como dependência de ferramentas sem nenhum benefício; inconsistente com a stack Perl |
 | **Scripts em `script/`** | Misturaria scripts de aplicação (Mojolicious) com scripts de engenharia; convenção Mojolicious espera apenas o ponto de entrada da app em `script/` |
 | **Docker exec como wrapper** | Requer Docker em execução para tarefas que poderiam ser locais; dificulta uso em ambientes de CI sem Docker-in-Docker |
+| **Wrapper `.ps1` por script (decisão original desta ADR)** | Nunca foi o caminho documentado como principal; o wrapper implementado na Stega divergiu do comando real (`carton exec perl eng/script.pl`) por omitir `carton exec`, mascarando o uso de dependências fora de `local/`; dobra o número de arquivos em `eng/` sem ganho de portabilidade, já que `perl eng\script.pl` já funciona nativamente em qualquer shell do Windows — ver "Revisão 2026-07-01" |
 
 ## Consequências
 
 **Positivo**:
 - Uma única linguagem (Perl) cobre aplicação e automação de engenharia
-- Wrapper `.ps1` é trivial (3 linhas) — não há lógica duplicada
+- Um único arquivo por script — não há dois arquivos para manter sincronizados
 - Scripts são testáveis com o mesmo framework de testes da aplicação
-- `DEVELOPMENT.md` pode documentar todos os scripts em um único lugar
+- `DEVELOPMENT.md` pode documentar todos os scripts em um único lugar, com um único
+  comando de invocação válido em qualquer plataforma
 
 **Negativo**:
-- Desenvolvedores Windows precisam lembrar de usar o wrapper `.ps1` em vez de chamar
-  o `.pl` diretamente (embora `perl eng\script.pl` também funcione no PowerShell)
 - Scripts que usam módulos da aplicação (`use lib 'lib'`) precisam ser executados
   da raiz do repositório
 
 **Ações necessárias**:
-- Criar `eng/migrate.pl` e `eng/migrate.ps1` como scripts iniciais do projeto
-- Criar `eng/setup.pl` e `eng/setup.ps1` para verificação do ambiente
-- Documentar os scripts disponíveis em `DEVELOPMENT.md` (ver ADR-012)
+- Criar `eng/migrate.pl` e `eng/setup.pl` como scripts iniciais do projeto
+- Documentar os scripts disponíveis em `DEVELOPMENT.md` (ver ADR-012), sempre com o
+  comando `carton exec perl eng/<script>.pl`
 - Garantir que scripts em `eng/` tenham permissão de execução (`chmod +x`)
   nos sistemas Unix — isso pode ser configurado no Git com `git update-index --chmod=+x`
