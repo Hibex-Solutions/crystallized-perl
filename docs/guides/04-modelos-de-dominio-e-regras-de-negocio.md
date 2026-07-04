@@ -322,8 +322,8 @@ Em teste, o Repository real (`Stega::Repository::Pg::Product`, que envolve
 `Test::MockObject`. A razão: validar "rejeita slug duplicado" exige estado real
 entre chamadas dentro do mesmo teste (inserir, depois buscar) — simular isso com
 `Test::MockObject` exigiria capturar um array em closures manualmente, o que já é
-reimplementar uma Fake, só que sem a garantia de contrato que `with
-'Stega::Repository::Product';` oferece. `Test::MockObject` continua sendo a
+reimplementar uma Fake, só que sem a garantia de contrato que
+`with 'Stega::Repository::Product';` oferece. `Test::MockObject` continua sendo a
 ferramenta certa para o que já fazia bem: verificar uma interação pontual com um
 serviço externo (RabbitMQ, uma chamada HTTP), não para simular um repositório com
 estado.

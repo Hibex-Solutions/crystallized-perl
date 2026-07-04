@@ -6,8 +6,9 @@
 ## Contexto
 
 Durante a implementação da Stega (ADR-018), surgiram inconsistências no cabeçalho dos
-arquivos Perl do projeto: alguns scripts declaravam `use strict; use warnings; use
-feature 'say';`, outros usavam `use v5.42;`, e a presença de `use utf8;` era
+arquivos Perl do projeto: alguns scripts declaravam
+`use strict; use warnings; use feature 'say';`, outros usavam `use v5.42;`, e a presença
+de `use utf8;` era
 inconsistente. Essa última lacuna causou bugs reais de codificação de caracteres —
 scripts em `eng/` que imprimem texto em português (com acentos e cedilha) para o
 terminal produziam saída corrompida ou avisos `Wide character in print` quando

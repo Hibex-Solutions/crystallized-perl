@@ -177,9 +177,6 @@ A conexão AMQP é aberta e fechada a cada chamada — aceitável porque jobs Mi
 esporádicos, não um loop de alta frequência. O `eval` garante que uma falha do
 RabbitMQ não derruba o worker Minion nem perde o job (ele pode ser reenfileirado).
 
-1;
-```
-
 ### Worker consumidor (Net::AMQP::RabbitMQ)
 
 ```perl

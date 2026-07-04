@@ -155,8 +155,8 @@ services:
 
 `migrate` roda uma vez e sai (`restart: "no"`) — é o equivalente, em Docker Compose,
 ao InitContainer do Kubernetes (Passo 3): um processo curto que precisa terminar
-com sucesso *antes* de `app` subir, usando `depends_on: condition:
-service_completed_successfully`.
+com sucesso *antes* de `app` subir, usando
+`depends_on: condition: service_completed_successfully`.
 
 ```bash
 docker compose --profile full up --build

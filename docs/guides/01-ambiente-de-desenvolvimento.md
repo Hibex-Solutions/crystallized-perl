@@ -302,8 +302,8 @@ O Carton lê o `cpanfile.snapshot` e instala as versões exatas de todos os mód
 no diretório `local/`. Módulos XS como `DBD::Pg` precisam de compilador C —
 disponível por padrão no Strawberry Perl (Windows) e nas imagens Perl do Docker.
 
-**Windows nativo**: `Net::AMQP::RabbitMQ` falha ao instalar (`undefined reference to
-'poll'`) — é uma limitação real do pacote no MinGW/Winsock, não uma falta de
+**Windows nativo**: `Net::AMQP::RabbitMQ` falha ao instalar
+(`undefined reference to 'poll'`) — é uma limitação real do pacote no MinGW/Winsock, não uma falta de
 ferramenta. Os demais módulos instalam normalmente; esse módulo só é usado pelo
 worker de notificações da Stega. Veja a tabela de "Solução de problemas comuns" no
 final deste guia.

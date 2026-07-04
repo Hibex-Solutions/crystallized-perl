@@ -348,9 +348,9 @@ usava. **Correção sobre o alcance real desse gap**, descoberta só ao validar 
 contra a aplicação de verdade (não só lendo o código): a rota de API já estava protegida
 — `api/stega.yaml` já declarava `priority` como `enum: [low, medium, high, critical]` no
 schema de `requestBody`, e o plugin `Mojolicious::Plugin::OpenAPI` já rejeitava valores
-fora da lista com `400` antes mesmo do Controller ser chamado (confirmado: `priority:
-"urgentissimo"` devolve `400 {"errors":[{"message":"Not in enum list: low, medium, high,
-critical.","path":"/body/priority"}]}`, nunca chega no meu código novo). O gap real
+fora da lista com `400` antes mesmo do Controller ser chamado — confirmado enviando
+`priority: "urgentissimo"`, que devolve `400` com uma mensagem de erro do tipo "Not in
+enum list", nunca chegando no meu código novo. O gap real
 estava só na rota **web** (`Stega::Controller::Ticket::create`, formulário HTML) — essa
 rota não passa pelo plugin OpenAPI (validação automática é só para `/api/*`), então um
 POST direto e adulterado para `/tickets` com uma prioridade fora da lista era aceito sem
@@ -397,8 +397,8 @@ aplica a eles.
 
 **Achado ao ler `Auth.pm` de perto**: havia **duas implementações divergentes** da
 mesma operação de sincronizar usuário a partir do JWT. `require_jwt` (chamado em toda
-requisição autenticada da API) fazia um `INSERT ... ON CONFLICT (keycloak_id) DO
-UPDATE` atômico, mas descartava a informação de "usuário novo ou existente"
+requisição autenticada da API) fazia um `INSERT ... ON CONFLICT (keycloak_id) DO UPDATE`
+atômico, mas descartava a informação de "usuário novo ou existente"
 (`RETURNING id` apenas). `_sync_user` (chamado só no `callback` do fluxo OAuth web)
 fazia um `SELECT` seguido de `UPDATE` ou `INSERT` em instruções separadas — não-atômico,
 sujeito a condição de corrida em dois logins concorrentes do mesmo usuário novo — só
@@ -407,8 +407,8 @@ e-mail de boas-vindas). Duas rotas de entrada, duas lógicas de upsert que podia
 divergir silenciosamente com o tempo.
 
 **Correção**: `Stega::Repository::Pg::User::upsert_from_keycloak` unifica as duas em um
-único `INSERT ... ON CONFLICT DO UPDATE ... RETURNING id, ..., (xmax = 0) AS
-is_first_login` — `xmax = 0` é o idioma padrão do Postgres para saber, dentro do
+único `INSERT ... ON CONFLICT DO UPDATE ... RETURNING id, ..., (xmax = 0) AS is_first_login`
+— `xmax = 0` é o idioma padrão do Postgres para saber, dentro do
 próprio `RETURNING`, se a linha foi inserida ou atualizada nesta mesma instrução,
 eliminando o `SELECT` prévio não-atômico. Validado diretamente via `psql`: duas
 chamadas consecutivas com o mesmo `keycloak_id` devolvem `is_first_login = t` na
@@ -443,8 +443,8 @@ ela.
 - ✅ `Stega::Repository::Pg::Ticket` ganhou `list_for_dashboard`;
   `Stega::Controller::Dashboard` sem SQL direto
 - ✅ Validado via `psql` direto (upsert idempotente com `is_first_login` correto nas
-  duas chamadas; as duas queries de dashboard) e via suíte completa (75 testes, `Result:
-  PASS`)
+  duas chamadas; as duas queries de dashboard) e via suíte completa
+  (75 testes, `Result: PASS`)
 - Únicos Controllers com SQL direto remanescentes: `Health` (health check de
   infraestrutura, não é acesso a entidade) e `Webhook` (não toca banco)
 
@@ -455,8 +455,9 @@ que citam `require_jwt` como um dos dois consumidores reais do upsert unificado 
 **errados**. Ao investigar um pedido do usuário sobre centralização de configuração
 (variáveis de ambiente espalhadas), um `grep -rn "require_jwt"` no repositório mostrou
 que esse método **nunca é referenciado por nenhuma rota** — é código morto. O caminho
-que de fato roda em toda requisição de API autenticada é o handler `security =>
-{ bearerAuth => ... }` dentro de `_setup_openapi` em `lib/Stega.pm`, que **não** tinha
+que de fato roda em toda requisição de API autenticada é o handler `bearerAuth`
+(dentro do bloco `security` passado ao plugin OpenAPI) em `_setup_openapi`, em
+`lib/Stega.pm`, que **não** tinha
 sido tocado na revisão anterior e ainda continha sua própria cópia inline do upsert
 original (`INSERT ... ON CONFLICT ... RETURNING id`, sem `is_first_login`). Ou seja,
 havia **três** implementações divergentes do mesmo upsert, não duas — e a correção
