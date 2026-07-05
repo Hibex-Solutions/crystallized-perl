@@ -228,3 +228,54 @@ Os demais exemplos desta ADR (`?` como placeholder, `jsonb_set`, operadores `@>`
 `?`) permanecem ilustrativos e genéricos, no mesmo estilo já usado pela ADR-016 — a
 Stega usa `$1, $2, ...` (bind posicional do Postgres) em vez de `?`, mas isso não é uma
 divergência de decisão, só de estilo de exemplo entre ADR e código real.
+
+## Revisão 2026-07-04 (continuação) — a divergência acima era um bug, não um padrão
+
+**A seção "Escrita real diverge do exemplo `{ json => ... }`" acima estava errada** —
+não descrevia uma escolha deliberada da Stega, descrevia um **bug real de dupla
+codificação UTF-8**, achado pelo usuário navegando na aplicação (badge "via Webhook" no
+histórico de um ticket mostrando `GenÃ©rico Teste 030` em vez de `Genérico Teste 030`;
+confirmado via `octet_length`/`length` no Postgres que o dado já saía corrompido na
+escrita, não era exibição).
+
+**Causa raiz**: `encode_json()` do `Mojo::JSON` devolve uma string de bytes já
+codificados em UTF-8 (sem a flag `utf8` do Perl). Passar essa string como bind
+parameter para um placeholder com cast `::jsonb` explícito, com `pg_enable_utf8` ativo
+(padrão do Mojo::Pg), faz o DBD::Pg tratá-la como uma string "wide char" ainda não
+codificada e codificá-la **de novo** — cada caractere acentuado (2 bytes em UTF-8) vira
+4 bytes. Confirmado isolando as duas formas lado a lado no mesmo banco: `encode_json(...)`
++ `::jsonb` → corrompido; `{ json => ... }` (o exemplo *original* desta ADR, antes da
+revisão anterior) → correto.
+
+**Ou seja: o exemplo original desta ADR sempre esteve certo.** O padrão real da Stega
+divergia dele por um bug, não por uma decisão melhor. Corrigido em todos os pontos
+afetados (`Stega::Repository::Pg::Product`, `::Comment`, `::Ticket`, e
+`Stega::Job::CheckSlaBreaches`) para usar `{ json => ... }`, exatamente como esta ADR
+já recomendava:
+
+```perl
+# lib/Stega/Repository/Pg/Product.pm — corrigido, agora bate com o exemplo desta ADR
+my $settings = $attrs{settings} ? { json => $attrs{settings} } : undef;
+
+$self->db->query(
+    'INSERT INTO products (name, slug, description, settings)
+     VALUES ($1, $2, $3, $4) RETURNING *',
+    $attrs{name}, $attrs{slug}, $attrs{description}, $settings
+)->expand->hash;
+```
+
+Note que o cast `::jsonb` explícito também saiu — desnecessário com `{ json => ... }`,
+que já informa ao driver o tipo do parâmetro.
+
+Regressão coberta por testes novos que criam registros com acentuação em campo JSONB e
+conferem o valor exato via API (`t/020_products_api.t`, `t/010_tickets_api.t`) — antes
+desta correção, teriam falhado. Validado contra a aplicação real em Docker nos quatro
+pontos corrigidos, comparando `octet_length`/`length` diretamente no Postgres antes e
+depois. Suíte completa da Stega revalidada (89 testes, `Result: PASS`).
+
+Não afetado por este bug (nenhuma mudança necessária): `eng/seed.pl` usa
+`'{...}'::jsonb` como **literal embutido na própria string SQL**, não como bind
+parameter — mecanismo diferente, sem o mesmo risco (confirmado: a `description` do
+produto do seed, com "ç"/"ã", já batia `octet_length` correto antes desta correção).
+`Stega::Job::SendWelcomeNotification` usa `JSON::PP::encode_json` para publicar no
+RabbitMQ, não para bind de banco — contexto diferente.
