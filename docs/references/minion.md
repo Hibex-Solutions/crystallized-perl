@@ -30,3 +30,6 @@ enquanto o RabbitMQ conecta a Stega com serviços externos de notificação.
 
 - [ADR-008](../adrs/ADR-008-message-broker-rabbitmq.md) — Minion citado como alternativa complementar ao RabbitMQ para jobs internos
 - [ADR-018](../adrs/ADR-018-aplicacao-de-demonstracao.md) — Stega usa Minion com `Minion::Backend::Pg` para jobs assíncronos internos
+- [ADR-022](../adrs/ADR-022-filas-em-postgresql.md) — proposta (não aceita) que cita
+  `Minion::Backend::Pg` como prova de conceito já em produção do padrão
+  `SKIP LOCKED`/`LISTEN`/`NOTIFY` que fundamenta a substituição do RabbitMQ

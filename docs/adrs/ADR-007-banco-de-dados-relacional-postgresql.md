@@ -46,15 +46,12 @@ Conforme o fator III do 12-factor (configuração no ambiente), a conexão ao Po
 é sempre passada via variável de ambiente, nunca hardcoded:
 
 ```bash
-# Formato de URL (preferido — uma única variável)
-POSTGRESQL_URL=postgresql://user:password@host:5432/database
+# Servidor, porta e banco — nunca credencial (ver Revisão 2026-07-04 da ADR-016)
+POSTGRESQL_APP_URL=postgresql://host:5432/database
 
-# Ou variáveis separadas (alternativa)
-PGHOST=localhost
-PGPORT=5432
-PGDATABASE=myapp
-PGUSER=myapp_user
-PGPASSWORD=secret
+# Credencial separada — permite ConfigMap (URL) + Secret (usuário/senha) distintos
+POSTGRESQL_APP_USERNAME=myapp_user
+POSTGRESQL_APP_PASSWORD=secret
 ```
 
 ### Docker Compose para desenvolvimento

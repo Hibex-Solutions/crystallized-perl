@@ -68,11 +68,21 @@ spec:
           image: registry.exemplo.com/stega:2026.06.0
           command: ["carton", "exec", "perl", "eng/migrate.pl"]
           env:
-            - name: POSTGRESQL_MIGRATION_URL
+            - name: POSTGRESQL_APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: stega-config
+                  key: postgresql-app-url
+            - name: POSTGRESQL_APP_MIGRATION_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: stega-secrets
-                  key: postgresql-migration-url
+                  key: postgresql-app-migration-username
+            - name: POSTGRESQL_APP_MIGRATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: stega-secrets
+                  key: postgresql-app-migration-password
 
       containers:
         - name: api
@@ -81,11 +91,21 @@ spec:
             - containerPort: 8080
 
           env:
-            - name: POSTGRESQL_URL
+            - name: POSTGRESQL_APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: stega-config
+                  key: postgresql-app-url
+            - name: POSTGRESQL_APP_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: stega-secrets
-                  key: postgresql-url
+                  key: postgresql-app-username
+            - name: POSTGRESQL_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: stega-secrets
+                  key: postgresql-app-password
             - name: RABBITMQ_HOST
               valueFrom:
                 configMapKeyRef:
@@ -196,11 +216,21 @@ spec:
           image: registry.exemplo.com/stega:2026.06.0
           command: ["carton", "exec", "perl", "script/stega", "minion", "worker"]
           env:
-            - name: POSTGRESQL_URL
+            - name: POSTGRESQL_APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: stega-config
+                  key: postgresql-app-url
+            - name: POSTGRESQL_APP_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: stega-secrets
-                  key: postgresql-url
+                  key: postgresql-app-username
+            - name: POSTGRESQL_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: stega-secrets
+                  key: postgresql-app-password
           resources:
             requests:
               memory: "64Mi"
@@ -222,8 +252,10 @@ metadata:
   name: stega-secrets
 type: Opaque
 stringData:
-  postgresql-url:           postgresql://stega_app:SENHA@postgres:5432/stega
-  postgresql-migration-url: postgresql://stega_migrate:SENHA@postgres:5432/stega
+  postgresql-app-username:           stega_app
+  postgresql-app-password:           SENHA
+  postgresql-app-migration-username: stega_migrate
+  postgresql-app-migration-password: SENHA_MIGRATE
   rabbitmq-password:        SENHA_RABBITMQ
 ---
 # k8s/configmap.yaml
@@ -232,6 +264,8 @@ kind: ConfigMap
 metadata:
   name: stega-config
 data:
+  # Servidor/porta/banco — nunca credencial (Revisão 2026-07-04 da ADR-016)
+  postgresql-app-url: postgresql://postgres:5432/stega
   rabbitmq-host: rabbitmq.stega.svc.cluster.local
   keycloak-url:  https://keycloak.exemplo.com
   jwt-issuer:    https://keycloak.exemplo.com/realms/stega

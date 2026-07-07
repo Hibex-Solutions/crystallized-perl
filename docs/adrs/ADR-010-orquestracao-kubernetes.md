@@ -74,8 +74,11 @@ sub check {
 ### InitContainer de migrations
 
 O InitContainer executa antes dos containers principais. Se falhar, o Pod não
-avança — a aplicação nunca sobe com schema desatualizado. Usa `POSTGRESQL_MIGRATION_URL`
-(credencial DDL) separada da `POSTGRESQL_URL` (credencial DML) usada pela aplicação:
+avança — a aplicação nunca sobe com schema desatualizado. Usa
+`POSTGRESQL_APP_MIGRATION_USERNAME`/`_PASSWORD` (credencial DDL) separada de
+`POSTGRESQL_APP_USERNAME`/`_PASSWORD` (credencial DML) usada pela aplicação —
+ambas reaproveitam o mesmo `POSTGRESQL_APP_URL`, que nunca carrega credencial
+(ver Revisão 2026-07-04 da ADR-016):
 
 ```yaml
 # trecho do api-deployment.yaml
@@ -87,11 +90,15 @@ spec:
           image: registry.example.com/myapp:latest
           command: ["carton", "exec", "perl", "eng/migrate.pl"]
           env:
-            - name: POSTGRESQL_MIGRATION_URL
+            - name: POSTGRESQL_APP_URL
               valueFrom:
-                secretKeyRef:
-                  name: myapp-secrets
-                  key: POSTGRESQL_MIGRATION_URL
+                configMapKeyRef: { name: myapp-config, key: POSTGRESQL_APP_URL }
+            - name: POSTGRESQL_APP_MIGRATION_USERNAME
+              valueFrom:
+                secretKeyRef: { name: myapp-secrets, key: POSTGRESQL_APP_MIGRATION_USERNAME }
+            - name: POSTGRESQL_APP_MIGRATION_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: myapp-secrets, key: POSTGRESQL_APP_MIGRATION_PASSWORD }
 ```
 
 ### Deployment da API
@@ -122,11 +129,15 @@ spec:
           image: registry.example.com/myapp:latest
           command: ["carton", "exec", "perl", "eng/migrate.pl"]
           env:
-            - name: POSTGRESQL_MIGRATION_URL
+            - name: POSTGRESQL_APP_URL
               valueFrom:
-                secretKeyRef:
-                  name: myapp-secrets
-                  key: POSTGRESQL_MIGRATION_URL
+                configMapKeyRef: { name: myapp-config, key: POSTGRESQL_APP_URL }
+            - name: POSTGRESQL_APP_MIGRATION_USERNAME
+              valueFrom:
+                secretKeyRef: { name: myapp-secrets, key: POSTGRESQL_APP_MIGRATION_USERNAME }
+            - name: POSTGRESQL_APP_MIGRATION_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: myapp-secrets, key: POSTGRESQL_APP_MIGRATION_PASSWORD }
 
       containers:
         - name: api
@@ -138,9 +149,9 @@ spec:
           # Injeção de configuração via Secret e ConfigMap
           envFrom:
             - secretRef:
-                name: myapp-secrets        # POSTGRESQL_URL, RABBITMQ_HOST, etc.
+                name: myapp-secrets        # POSTGRESQL_APP_USERNAME/_PASSWORD, RABBITMQ_HOST, etc.
             - configMapRef:
-                name: myapp-config         # KEYCLOAK_URL, KEYCLOAK_REALM, etc.
+                name: myapp-config         # POSTGRESQL_APP_URL, KEYCLOAK_URL, etc.
 
           # Probe de readiness: o Pod só entra no balanceamento quando responder 200
           readinessProbe:
@@ -220,8 +231,10 @@ metadata:
   name: myapp-secrets
 type: Opaque
 stringData:
-  POSTGRESQL_URL:             "postgresql://myapp_app:senha_app@postgres-svc:5432/myapp"
-  POSTGRESQL_MIGRATION_URL:   "postgresql://myapp_migrate:senha_migrate@postgres-svc:5432/myapp"
+  POSTGRESQL_APP_USERNAME:           "myapp_app"
+  POSTGRESQL_APP_PASSWORD:           "senha_app"
+  POSTGRESQL_APP_MIGRATION_USERNAME: "myapp_migrate"
+  POSTGRESQL_APP_MIGRATION_PASSWORD: "senha_migrate"
   RABBITMQ_HOST:         "rabbitmq-svc"
   RABBITMQ_USER:         "myapp"
   RABBITMQ_PASSWORD:     "password"
@@ -233,6 +246,9 @@ kind: ConfigMap
 metadata:
   name: myapp-config
 data:
+  # POSTGRESQL_APP_URL não é segredo — só servidor, porta e banco, sem
+  # credencial (Revisão 2026-07-04 da ADR-016)
+  POSTGRESQL_APP_URL: "postgresql://postgres-svc:5432/myapp"
   KEYCLOAK_URL:    "https://auth.example.com"
   KEYCLOAK_REALM:  "myapp"
   KEYCLOAK_CLIENT_ID: "myapp-api"

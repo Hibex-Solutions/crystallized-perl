@@ -37,6 +37,9 @@ devem também estar em português, garantindo coerência com o restante da docum
 | 7 | `## Consequências` | Resultados positivos e negativos; ações necessárias |
 
 **Valores de Status**:
+- `Proposta` — decisão ainda não aceita, em avaliação; pode propor revogar ou substituir
+  uma ADR `Aceita` existente, mas essa revogação só entra em vigor quando o status muda
+  para `Aceita`
 - `Aceita` — decisão em vigor
 - `Substituída por ADR-NNN` — decisão substituída; manter o arquivo para histórico
 - `Obsoleta` — decisão não se aplica mais; manter para histórico
@@ -46,7 +49,7 @@ devem também estar em português, garantindo coerência com o restante da docum
 ```markdown
 # ADR-NNN: Título
 
-**Status**: Aceita | Substituída por ADR-NNN | Obsoleta  
+**Status**: Proposta | Aceita | Substituída por ADR-NNN | Obsoleta  
 **Data**: YYYY-MM-DD
 
 ## Contexto
@@ -104,6 +107,13 @@ Um parágrafo explicando o que esta fonte contribui para a definição do stack.
 - ADR-NNN: Título da ADR
 - Guia: nome-do-guia
 ```
+
+**Revisão 2026-07-04**: adicionado o valor de status `Proposta`. Até então o padrão só
+previa decisões já tomadas (`Aceita`) ou historicamente substituídas
+(`Substituída por ADR-NNN`/`Obsoleta`) — não havia como registrar uma decisão em
+avaliação, ainda sem aceite do usuário, incluindo uma que proponha revogar uma ADR
+`Aceita` existente. Uma ADR `Proposta` não altera nenhuma decisão em vigor até ser
+aceita; enquanto isso, a ADR que ela propõe substituir permanece `Aceita` e válida.
 
 ## Justificativa
 

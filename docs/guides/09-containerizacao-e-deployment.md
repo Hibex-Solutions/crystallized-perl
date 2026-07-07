@@ -123,7 +123,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     environment:
-      POSTGRESQL_MIGRATION_URL: postgresql://postgres:postgres_dev@postgres:5432/stega
+      POSTGRESQL_APP_URL: postgresql://postgres:5432/stega
+      POSTGRESQL_APP_MIGRATION_USERNAME: postgres
+      POSTGRESQL_APP_MIGRATION_PASSWORD: postgres_dev
     command: perl eng/migrate.pl
     restart: "no"
 
@@ -133,7 +135,9 @@ services:
     depends_on:
       seed: { condition: service_completed_successfully }
     environment:
-      POSTGRESQL_URL: postgresql://postgres:postgres_dev@postgres:5432/stega
+      POSTGRESQL_APP_URL: postgresql://postgres:5432/stega
+      POSTGRESQL_APP_USERNAME: postgres
+      POSTGRESQL_APP_PASSWORD: postgres_dev
       RABBITMQ_HOST: rabbitmq
     ports: ["3000:3000"]
     command: perl script/stega daemon
@@ -194,9 +198,15 @@ spec:
           image: registry.example.com/stega:latest
           command: ["carton", "exec", "perl", "eng/migrate.pl"]
           env:
-            - name: POSTGRESQL_MIGRATION_URL
+            - name: POSTGRESQL_APP_URL
               valueFrom:
-                secretKeyRef: { name: stega-secrets, key: POSTGRESQL_MIGRATION_URL }
+                configMapKeyRef: { name: stega-config, key: POSTGRESQL_APP_URL }
+            - name: POSTGRESQL_APP_MIGRATION_USERNAME
+              valueFrom:
+                secretKeyRef: { name: stega-secrets, key: POSTGRESQL_APP_MIGRATION_USERNAME }
+            - name: POSTGRESQL_APP_MIGRATION_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: stega-secrets, key: POSTGRESQL_APP_MIGRATION_PASSWORD }
 
       containers:
         - name: api
@@ -206,8 +216,8 @@ spec:
             - containerPort: 3000
 
           envFrom:
-            - secretRef: { name: stega-secrets }      # POSTGRESQL_URL, RABBITMQ_*, KEYCLOAK_CLIENT_SECRET
-            - configMapRef: { name: stega-config }     # KEYCLOAK_URL, KEYCLOAK_REALM, etc.
+            - secretRef: { name: stega-secrets }      # POSTGRESQL_APP_USERNAME/_PASSWORD, RABBITMQ_*, KEYCLOAK_CLIENT_SECRET
+            - configMapRef: { name: stega-config }     # POSTGRESQL_APP_URL, KEYCLOAK_URL, KEYCLOAK_REALM, etc.
 
           readinessProbe:
             httpGet: { path: /healthz, port: 3000 }
@@ -226,8 +236,9 @@ spec:
             limits:   { memory: "256Mi", cpu: "500m" }
 ```
 
-`POSTGRESQL_MIGRATION_URL` (privilégio DDL) só existe no InitContainer — o container
-principal `api` recebe apenas `POSTGRESQL_URL` (DML) via `stega-secrets`. Um bug na
+`POSTGRESQL_APP_MIGRATION_USERNAME`/`_PASSWORD` (privilégio DDL) só existe no
+InitContainer — o container principal `api` recebe apenas `POSTGRESQL_APP_USERNAME`/
+`_PASSWORD` (DML) via `stega-secrets`. Um bug na
 aplicação não consegue alterar o schema, porque a credencial que ela usa não tem
 esse privilégio (Guia 5).
 
@@ -303,8 +314,10 @@ metadata:
   name: stega-secrets
 type: Opaque
 stringData:
-  POSTGRESQL_URL:           "postgresql://stega_app:senha_app@postgres-svc:5432/stega"
-  POSTGRESQL_MIGRATION_URL: "postgresql://stega_migrate:senha_migrate@postgres-svc:5432/stega"
+  POSTGRESQL_APP_USERNAME:           "stega_app"
+  POSTGRESQL_APP_PASSWORD:           "senha_app"
+  POSTGRESQL_APP_MIGRATION_USERNAME: "stega_migrate"
+  POSTGRESQL_APP_MIGRATION_PASSWORD: "senha_migrate"
   RABBITMQ_HOST:            "rabbitmq-svc"
   RABBITMQ_PASSWORD:        "senha"
   KEYCLOAK_CLIENT_SECRET:   "secret"
@@ -315,6 +328,8 @@ kind: ConfigMap
 metadata:
   name: stega-config
 data:
+  # Servidor/porta/banco — nunca credencial (Revisão 2026-07-04 da ADR-016)
+  POSTGRESQL_APP_URL: "postgresql://postgres-svc:5432/stega"
   KEYCLOAK_URL:   "https://auth.example.com"
   KEYCLOAK_REALM: "stega"
   RABBITMQ_USER:  "stega"
@@ -344,7 +359,7 @@ facilita saber o que precisa de rotação/Sealed Secrets em produção.
 |----------|---------------|---------|
 | Build falha no estágio `test` | Um teste real está quebrando | Rode `carton exec prove -lr t/` localmente antes de buildar |
 | Pod fica em `Init:CrashLoopBackOff` | InitContainer de migration falhando | `kubectl logs <pod> -c migrate` — geralmente credencial DDL errada ou Postgres inacessível |
-| `readinessProbe` nunca fica `Ready` | `/healthz` checando o banco e o banco está inacessível do Pod | Confirme `POSTGRESQL_URL` e conectividade de rede (NetworkPolicy, Service correto) |
+| `readinessProbe` nunca fica `Ready` | `/healthz` checando o banco e o banco está inacessível do Pod | Confirme `POSTGRESQL_APP_URL`/`POSTGRESQL_APP_USERNAME`/`_PASSWORD` e conectividade de rede (NetworkPolicy, Service correto) |
 | Imagem de produção maior que o esperado | Camadas do estágio `deps` (gcc, headers `-dev`) vazando para produção | Confirme que `production` parte de `perl:5.42-slim` limpo, não de `deps` |
 
 ---

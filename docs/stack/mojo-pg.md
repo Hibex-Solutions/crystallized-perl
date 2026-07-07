@@ -30,12 +30,17 @@ marcadores de versão, sem framework externo e sem dependências adicionais.
 package Stega;
 use Mojo::Base 'Mojolicious';
 use Mojo::Pg;
+use Mojo::URL;
 
 sub startup {
     my $self = shift;
 
+    # POSTGRESQL_APP_URL nunca carrega credencial (Revisão 2026-07-04 da ADR-016)
+    my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL});
+    $conn->userinfo("$ENV{POSTGRESQL_APP_USERNAME}:$ENV{POSTGRESQL_APP_PASSWORD}");
+
     # Instância única de Mojo::Pg compartilhada por toda a aplicação
-    my $pg = Mojo::Pg->new($ENV{POSTGRESQL_URL});
+    my $pg = Mojo::Pg->new($conn);
     $self->helper(pg => sub { $pg });
 
     # ... resto do startup
@@ -44,8 +49,11 @@ sub startup {
 
 ```bash
 # .env
-POSTGRESQL_URL=postgresql://stega_app:senha@localhost:5432/stega
-POSTGRESQL_MIGRATION_URL=postgresql://stega_migrate:senha@localhost:5432/stega
+POSTGRESQL_APP_URL=postgresql://localhost:5432/stega
+POSTGRESQL_APP_USERNAME=stega_app
+POSTGRESQL_APP_PASSWORD=senha
+POSTGRESQL_APP_MIGRATION_USERNAME=stega_migrate
+POSTGRESQL_APP_MIGRATION_PASSWORD=senha
 ```
 
 ---
@@ -208,8 +216,12 @@ use utf8;
 use open ':std', ':encoding(UTF-8)';
 $| = 1;
 use Mojo::Pg;
+use Mojo::URL;
 
-my $pg = Mojo::Pg->new($ENV{POSTGRESQL_MIGRATION_URL});
+my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL});
+$conn->userinfo("$ENV{POSTGRESQL_APP_MIGRATION_USERNAME}:$ENV{POSTGRESQL_APP_MIGRATION_PASSWORD}");
+
+my $pg = Mojo::Pg->new($conn);
 
 my $migrations = $pg->migrations
    ->name('stega')

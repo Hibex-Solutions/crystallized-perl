@@ -3,12 +3,25 @@
 **Status**: Aceita
 **Data**: 2026-07-03
 
+> **Nota 2026-07-04**: as variáveis `POSTGRESQL_APP_URL`/`POSTGRESQL_APP_USERNAME`/
+> `POSTGRESQL_APP_PASSWORD`/`POSTGRESQL_APP_MIGRATION_USERNAME`/
+> `POSTGRESQL_APP_MIGRATION_PASSWORD` abaixo já refletem a Revisão 2026-07-04 da
+> [ADR-016](ADR-016-acesso-a-dados-relacional-mojo-pg.md) (formato explícito, sem
+> credenciais embutidas na URL) — essa parte está **em vigor**. O restante da lista
+> pode mudar se duas ADRs `Proposta` forem aceitas: a
+> [ADR-022](ADR-022-filas-em-postgresql.md) remove a chave `rabbitmq`; a
+> [ADR-023](ADR-023-topologia-de-instancias-postgresql.md) acrescenta
+> `POSTGRESQL_JOBS_URL`/`_USERNAME`/`_PASSWORD` e, condicionalmente,
+> `POSTGRESQL_EVENTS_URL`/`_USERNAME`/`_PASSWORD`.
+
 ## Contexto
 
 A Stega lê dezenas de variáveis de ambiente (`KEYCLOAK_URL`, `KEYCLOAK_FRONTEND_URL`,
 `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `RABBITMQ_HOST`,
 `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST`, `RABBITMQ_PORT`,
-`POSTGRESQL_URL`, `POSTGRESQL_MIGRATION_URL`, `STEGA_SECRET`, `TEST_JWT_SECRET`,
+`POSTGRESQL_APP_URL`, `POSTGRESQL_APP_USERNAME`, `POSTGRESQL_APP_PASSWORD`,
+`POSTGRESQL_APP_MIGRATION_USERNAME`, `POSTGRESQL_APP_MIGRATION_PASSWORD`,
+`STEGA_SECRET`, `TEST_JWT_SECRET`,
 `GITHUB_WEBHOOK_SECRET`) espalhadas por `$ENV{...}` direto em Controllers, Jobs,
 Workers e scripts de engenharia. Antes desta ADR:
 

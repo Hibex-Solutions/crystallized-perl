@@ -112,11 +112,13 @@ $| = 1;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 use Mojo::Pg;
+use Mojo::URL;
 
-my $pg = Mojo::Pg->new(
-    $ENV{POSTGRESQL_MIGRATION_URL}
-        // 'postgresql://myapp_migrate:dev_password@localhost/myapp'
-);
+my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL} // 'postgresql://localhost:5432/db-app');
+$conn->userinfo(($ENV{POSTGRESQL_APP_MIGRATION_USERNAME} // 'myapp_migrate') . ':'
+    . ($ENV{POSTGRESQL_APP_MIGRATION_PASSWORD} // 'dev_password'));
+
+my $pg = Mojo::Pg->new($conn);
 
 my $migrations = $pg->migrations->name('myapp')
     ->from_dir("$FindBin::Bin/../migrations");

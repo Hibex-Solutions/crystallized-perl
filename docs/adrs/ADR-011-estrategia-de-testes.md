@@ -351,12 +351,16 @@ jobs:
       - name: Aplicar migrations
         run: carton exec perl eng/migrate.pl
         env:
-          POSTGRESQL_MIGRATION_URL: postgresql://test:test@localhost/myapp_test
+          POSTGRESQL_APP_URL: postgresql://localhost:5432/myapp_test
+          POSTGRESQL_APP_MIGRATION_USERNAME: test
+          POSTGRESQL_APP_MIGRATION_PASSWORD: test
 
       - name: Rodar testes
         run: carton exec prove -lr t/
         env:
-          POSTGRESQL_URL: postgresql://test:test@localhost/myapp_test
+          POSTGRESQL_APP_URL: postgresql://localhost:5432/myapp_test
+          POSTGRESQL_APP_USERNAME: test
+          POSTGRESQL_APP_PASSWORD: test
 
       - name: Gerar relatório de cobertura
         run: |

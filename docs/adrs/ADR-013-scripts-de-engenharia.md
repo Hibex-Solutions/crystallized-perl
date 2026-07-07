@@ -114,9 +114,10 @@ $| = 1;
 
 ### Exemplo: script de migration
 
-O script usa `POSTGRESQL_MIGRATION_URL` (credencial DDL, com privilégios de CREATE/ALTER/DROP)
-e delega ao `Mojo::Pg::Migrations->from_dir` nativo — nenhum loader customizado
-(ver ADR-016 para a convenção de diretórios e separação de credenciais):
+O script usa `POSTGRESQL_APP_MIGRATION_USERNAME`/`_PASSWORD` (credencial DDL, com
+privilégios de CREATE/ALTER/DROP) e delega ao `Mojo::Pg::Migrations->from_dir`
+nativo — nenhum loader customizado (ver ADR-016 para a convenção de diretórios,
+separação de credenciais e o formato explícito de variáveis — Revisão 2026-07-04):
 
 ```perl
 #!/usr/bin/env perl
@@ -129,11 +130,13 @@ $| = 1;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 use Mojo::Pg;
+use Mojo::URL;
 
-my $pg = Mojo::Pg->new(
-    $ENV{POSTGRESQL_MIGRATION_URL}
-        // 'postgresql://myapp_migrate:dev_password@localhost/myapp'
-);
+my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL} // 'postgresql://localhost:5432/db-app');
+$conn->userinfo(($ENV{POSTGRESQL_APP_MIGRATION_USERNAME} // 'myapp_migrate') . ':'
+    . ($ENV{POSTGRESQL_APP_MIGRATION_PASSWORD} // 'dev_password'));
+
+my $pg = Mojo::Pg->new($conn);
 
 my $migrations = $pg->migrations->name('myapp')
     ->from_dir("$FindBin::Bin/../migrations");
@@ -155,10 +158,13 @@ use open ':std', ':encoding(UTF-8)';
 $| = 1;
 use lib 'lib';
 use Mojo::Pg;
+use Mojo::URL;
 
-my $pg = Mojo::Pg->new(
-    $ENV{POSTGRESQL_URL} // 'postgresql://myapp_app:dev_password@localhost/myapp'
-);
+my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL} // 'postgresql://localhost:5432/db-app');
+$conn->userinfo(($ENV{POSTGRESQL_APP_USERNAME} // 'myapp_app') . ':'
+    . ($ENV{POSTGRESQL_APP_PASSWORD} // 'dev_password'));
+
+my $pg = Mojo::Pg->new($conn);
 
 my $db = $pg->db;
 
@@ -192,7 +198,7 @@ my @checks = (
     [ 'Perl >= 5.42'   => sub { $] >= 5.042 } ],
     [ 'Carton'         => sub { scalar(`carton --version 2>&1`) && !$? } ],
     [ 'Docker'         => sub { scalar(`docker info 2>&1`)     && !$? } ],
-    [ 'POSTGRESQL_URL' => sub { defined $ENV{POSTGRESQL_URL} } ],
+    [ 'POSTGRESQL_APP_URL' => sub { defined $ENV{POSTGRESQL_APP_URL} } ],
 );
 
 my $ok = 1;

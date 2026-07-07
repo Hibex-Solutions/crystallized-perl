@@ -127,8 +127,12 @@ services:
     environment:
       # Em desenvolvimento, um único usuário privilegiado serve ambas as conexões.
       # Em produção, myapp_app (DML) e myapp_migrate (DDL) são usuários distintos — ver ADR-016.
-      - POSTGRESQL_URL=postgresql://myapp:dev_password@postgres/myapp
-      - POSTGRESQL_MIGRATION_URL=postgresql://myapp:dev_password@postgres/myapp
+      # POSTGRESQL_APP_URL nunca carrega credencial (ver Revisão 2026-07-04 da ADR-016)
+      - POSTGRESQL_APP_URL=postgresql://postgres:5432/myapp
+      - POSTGRESQL_APP_USERNAME=myapp
+      - POSTGRESQL_APP_PASSWORD=dev_password
+      - POSTGRESQL_APP_MIGRATION_USERNAME=myapp
+      - POSTGRESQL_APP_MIGRATION_PASSWORD=dev_password
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=guest
       - RABBITMQ_PASSWORD=guest

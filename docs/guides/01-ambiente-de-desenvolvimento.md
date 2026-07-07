@@ -244,11 +244,16 @@ Para o caminho A ou B (Perl nativo), ajuste as URLs de banco se necessário:
 ```bash
 # .env — valores padrão para desenvolvimento local (copie de .env.example)
 
-# Aplicação — conexão principal
-POSTGRESQL_URL=postgresql://postgres:postgres_dev@localhost:5432/stega
+# Servidor/porta/banco — sem credencial (ver Revisão 2026-07-04 da ADR-016)
+POSTGRESQL_APP_URL=postgresql://localhost:5432/stega
 
-# Migration — mesma conexão em desenvolvimento (usuários distintos em produção)
-POSTGRESQL_MIGRATION_URL=postgresql://postgres:postgres_dev@localhost:5432/stega
+# Aplicação — conexão principal (mesmo usuário em desenvolvimento; distintos em produção)
+POSTGRESQL_APP_USERNAME=postgres
+POSTGRESQL_APP_PASSWORD=postgres_dev
+
+# Migration — mesma credencial em desenvolvimento (usuários distintos em produção)
+POSTGRESQL_APP_MIGRATION_USERNAME=postgres
+POSTGRESQL_APP_MIGRATION_PASSWORD=postgres_dev
 
 # RabbitMQ
 RABBITMQ_HOST=localhost

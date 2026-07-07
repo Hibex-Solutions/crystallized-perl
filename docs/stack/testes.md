@@ -267,19 +267,25 @@ jobs:
       - name: Aplicar migrations
         run: carton exec perl eng/migrate.pl
         env:
-          POSTGRESQL_MIGRATION_URL: postgresql://stega_migrate:test@localhost/stega_test
+          POSTGRESQL_APP_URL: postgresql://localhost:5432/stega_test
+          POSTGRESQL_APP_MIGRATION_USERNAME: stega_migrate
+          POSTGRESQL_APP_MIGRATION_PASSWORD: test
 
       - name: Rodar testes
         run: carton exec prove -lr t/
         env:
-          POSTGRESQL_URL: postgresql://stega_migrate:test@localhost/stega_test
+          POSTGRESQL_APP_URL: postgresql://localhost:5432/stega_test
+          POSTGRESQL_APP_USERNAME: stega_migrate
+          POSTGRESQL_APP_PASSWORD: test
 
       - name: Gerar cobertura
         run: |
           PERL5OPT="-MDevel::Cover" carton exec prove -lr t/
           carton exec cover -report clover
         env:
-          POSTGRESQL_URL: postgresql://stega_migrate:test@localhost/stega_test
+          POSTGRESQL_APP_URL: postgresql://localhost:5432/stega_test
+          POSTGRESQL_APP_USERNAME: stega_migrate
+          POSTGRESQL_APP_PASSWORD: test
 ```
 
 ---

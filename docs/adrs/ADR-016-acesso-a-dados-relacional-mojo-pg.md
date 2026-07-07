@@ -56,6 +56,41 @@ restrito a DML.
 A ausência de um ORM pesado (como DBIx::Class) é intencional: SQL explícito é mais
 fácil de auditar, de otimizar com `EXPLAIN ANALYZE` e de rastrear no histórico do Git.
 
+**Revisão 2026-07-04** — o formato das variáveis de conexão mudou de uma URL única
+com credenciais embutidas (`postgresql://usuario:senha@host/banco`) para variáveis
+explícitas por componente: `POSTGRESQL_APP_URL` (servidor, porta e nome do banco,
+**sem** credenciais) mais `POSTGRESQL_APP_USERNAME`/`POSTGRESQL_APP_PASSWORD`
+(credencial de execução) e `POSTGRESQL_APP_MIGRATION_USERNAME`/
+`POSTGRESQL_APP_MIGRATION_PASSWORD` (credencial de migração). Motivo: (1) consistência
+com o padrão já usado pelo Keycloak (URL do servidor separada de credenciais de
+cliente — ADR-009); (2) permite que `HOST`/`PORT`/`URL` (não sensíveis) vivam num
+`ConfigMap` e só usuário/senha vivam num `Secret` no Kubernetes — hoje a URL inteira
+precisa ir para `Secret` porque a senha está embutida junto com informação que não é
+sensível; (3) o sufixo `APP` antecipa a convenção de nomenclatura por finalidade da
+ADR-023 (`POSTGRESQL_{SUFIXO}_*`, proposta) — mesmo que essa ADR não seja aceita,
+o sufixo não custa nada hoje. A URL não embute credenciais precisamente para
+suportar o cenário em que cada instância mora em infraestrutura completamente
+diferente (RDS, on-premises, dentro do próprio cluster) — a URL carrega "onde",
+username/password carregam "quem", e são independentes um do outro.
+
+A aplicação compõe a connection string final em tempo de execução, em vez de
+receber uma URL já pronta:
+
+```perl
+use Mojo::URL;
+
+my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL} // 'postgresql://localhost:5432/db-app');
+$conn->userinfo($ENV{POSTGRESQL_APP_USERNAME} . ':' . $ENV{POSTGRESQL_APP_PASSWORD});
+
+my $pg = Mojo::Pg->new($conn);
+```
+
+**A validar na implementação**: confirmar se `Mojo::URL->userinfo` escapa
+automaticamente caracteres especiais (`:`, `@`, `/`) que apareçam na senha, ou se é
+necessário aplicar `Mojo::Util::url_escape` explicitamente antes de montar a
+string — e confirmar que `Mojo::Pg->new` aceita um objeto `Mojo::URL` diretamente
+(não só string).
+
 Referências: [Mojo::Pg](../references/mojo-pg.md),
 [PostgreSQL](../references/postgresql.md),
 [The Twelve-Factor App](../references/twelve-factor-app.md)
@@ -135,13 +170,18 @@ package MyApp;
 use Mojo::Base 'Mojolicious';
 
 use Mojo::Pg;
+use Mojo::URL;
 
 sub startup {
     my $self = shift;
 
     # Usuário DML: SELECT, INSERT, UPDATE, DELETE apenas (ver seção de permissões)
-    my $pg = Mojo::Pg->new($ENV{POSTGRESQL_URL}
-        // 'postgresql://myapp_app:dev_password@localhost/myapp');
+    # POSTGRESQL_APP_URL não carrega credenciais — só servidor, porta e banco
+    my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL} // 'postgresql://localhost:5432/db-app');
+    $conn->userinfo(($ENV{POSTGRESQL_APP_USERNAME} // 'myapp_app') . ':'
+        . ($ENV{POSTGRESQL_APP_PASSWORD} // 'dev_password'));
+
+    my $pg = Mojo::Pg->new($conn);
 
     # Disponibilizar via helper nos controladores
     $self->helper(pg => sub { $pg });
@@ -158,8 +198,8 @@ sub startup {
 
 **Desenvolvimento local — `eng/migrate.pl`:**
 
-O script usa `POSTGRESQL_MIGRATION_URL` (credencial DDL) e delega inteiramente ao
-`from_dir()` do Mojo::Pg — nenhum loader customizado:
+O script usa `POSTGRESQL_APP_MIGRATION_USERNAME`/`_PASSWORD` (credencial DDL) e
+delega inteiramente ao `from_dir()` do Mojo::Pg — nenhum loader customizado:
 
 ```perl
 #!/usr/bin/env perl
@@ -172,11 +212,14 @@ $| = 1;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 use Mojo::Pg;
+use Mojo::URL;
 
-my $pg = Mojo::Pg->new(
-    $ENV{POSTGRESQL_MIGRATION_URL}
-        // 'postgresql://myapp_migrate:dev_password@localhost/myapp'
-);
+# Mesma POSTGRESQL_APP_URL da aplicação (servidor/porta/banco) — só a credencial muda
+my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL} // 'postgresql://localhost:5432/db-app');
+$conn->userinfo(($ENV{POSTGRESQL_APP_MIGRATION_USERNAME} // 'myapp_migrate') . ':'
+    . ($ENV{POSTGRESQL_APP_MIGRATION_PASSWORD} // 'dev_password'));
+
+my $pg = Mojo::Pg->new($conn);
 
 my $migrations = $pg->migrations->name('myapp')
     ->from_dir("$FindBin::Bin/../migrations");
@@ -203,11 +246,15 @@ initContainers:
     image: registry.example.com/myapp:latest
     command: ["carton", "exec", "perl", "eng/migrate.pl"]
     env:
-      - name: POSTGRESQL_MIGRATION_URL
+      - name: POSTGRESQL_APP_URL
         valueFrom:
-          secretKeyRef:
-            name: myapp-secrets
-            key: POSTGRESQL_MIGRATION_URL
+          configMapKeyRef: { name: myapp-config, key: POSTGRESQL_APP_URL }
+      - name: POSTGRESQL_APP_MIGRATION_USERNAME
+        valueFrom:
+          secretKeyRef: { name: myapp-secrets, key: POSTGRESQL_APP_MIGRATION_USERNAME }
+      - name: POSTGRESQL_APP_MIGRATION_PASSWORD
+        valueFrom:
+          secretKeyRef: { name: myapp-secrets, key: POSTGRESQL_APP_MIGRATION_PASSWORD }
 ```
 
 ### Dois usuários de banco de dados
@@ -238,8 +285,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 | Variável de ambiente | Usuário | Privilégios |
 |---------------------|---------|-------------|
-| `POSTGRESQL_MIGRATION_URL` | `myapp_migrate` | DDL: CREATE, ALTER, DROP, GRANT + DML |
-| `POSTGRESQL_URL` | `myapp_app` | DML: SELECT, INSERT, UPDATE, DELETE |
+| `POSTGRESQL_APP_URL` | — (servidor/porta/banco, sem credencial) | — |
+| `POSTGRESQL_APP_MIGRATION_USERNAME`/`_PASSWORD` | `myapp_migrate` | DDL: CREATE, ALTER, DROP, GRANT + DML |
+| `POSTGRESQL_APP_USERNAME`/`_PASSWORD` | `myapp_app` | DML: SELECT, INSERT, UPDATE, DELETE |
 
 ### Queries em controladores
 
@@ -394,7 +442,8 @@ sub transfer {
   (`migrations/1/`, `migrations/2/`, ...) com `up.sql`/`down.sql`
 - Criar `eng/migrate.pl` (ver ADR-013 — sem wrapper `.ps1`)
 - Declarar `Mojo::Pg` >= 4.22 no `cpanfile`
-- Expor `POSTGRESQL_URL` (DML) e `POSTGRESQL_MIGRATION_URL` (DDL) como variáveis
-  de ambiente separadas em todos os ambientes
+- Expor `POSTGRESQL_APP_URL` (servidor/porta/banco), `POSTGRESQL_APP_USERNAME`/
+  `_PASSWORD` (DML) e `POSTGRESQL_APP_MIGRATION_USERNAME`/`_PASSWORD` (DDL) como
+  variáveis de ambiente separadas em todos os ambientes (ver Revisão 2026-07-04)
 - Provisionar dois usuários PostgreSQL com privilégios distintos
 - Configurar InitContainer no Deployment do Kubernetes (ver ADR-010)

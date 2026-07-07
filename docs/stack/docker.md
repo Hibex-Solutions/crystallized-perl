@@ -95,8 +95,11 @@ services:
       - .:/app              # monta código local — alterações refletidas em tempo real
       - /app/local          # volume anônimo para local/ não ser sobrescrito
     environment:
-      POSTGRESQL_URL: postgresql://stega_app:dev_password@postgres:5432/stega
-      POSTGRESQL_MIGRATION_URL: postgresql://stega_migrate:dev_password@postgres:5432/stega
+      POSTGRESQL_APP_URL: postgresql://postgres:5432/stega
+      POSTGRESQL_APP_USERNAME: stega_app
+      POSTGRESQL_APP_PASSWORD: dev_password
+      POSTGRESQL_APP_MIGRATION_USERNAME: stega_migrate
+      POSTGRESQL_APP_MIGRATION_PASSWORD: dev_password
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: stega
       RABBITMQ_PASSWORD: dev_password
@@ -123,7 +126,9 @@ services:
       - .:/app
       - /app/local
     environment:
-      POSTGRESQL_URL: postgresql://stega_app:dev_password@postgres:5432/stega
+      POSTGRESQL_APP_URL: postgresql://postgres:5432/stega
+      POSTGRESQL_APP_USERNAME: stega_app
+      POSTGRESQL_APP_PASSWORD: dev_password
     command: carton exec perl script/stega minion worker
     depends_on:
       postgres:

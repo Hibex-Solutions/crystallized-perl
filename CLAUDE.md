@@ -380,7 +380,22 @@ Follow this sequence when resuming work on this project:
    real (ADR-008 previa `Mojo::RabbitMQ::Client`, nunca usado — publicação sempre via
    job Minion; ADR-015 previa validação manual, mas o plugin
    `Mojolicious::Plugin::OpenAPI` sempre foi usado para validação automática). Não há
-   mais decisões TBD.
+   mais decisões TBD entre as ADRs `Aceita`.
+   **ADR-022 (Proposta, 2026-07-04)** — pendente de decisão do usuário: propõe
+   revogar a ADR-008 (RabbitMQ) e mover filas para PostgreSQL (candidato: PgQue),
+   motivada pela impossibilidade de compilar `Net::AMQP::RabbitMQ` no Windows e pelo
+   fim de manutenção dos clientes AMQP alternativos em Perl. Tem um estudo técnico
+   completo anexado em `docs/adrs/references/ADR-022-estudo-filas-postgresql.md`.
+   Enquanto o status permanecer `Proposta`, a ADR-008 continua `Aceita` e em vigor —
+   não tratar RabbitMQ como removido do stack até o usuário aceitar a ADR-022.
+   **ADR-023 (Proposta, 2026-07-04, revisada 2026-07-07)** — ortogonal à
+   ADR-022: propõe uma instância PostgreSQL dedicada por finalidade (`db-app`,
+   `db-jobs`, `db-events`, e `postgres-keycloak` dedicado ao Keycloak) em vez de
+   uma única instância compartilhada. A separação de `db-jobs` (Minion) independe
+   da ADR-022; `db-events` (PgQue) só existe se a ADR-022 também for aceita. O
+   mecanismo de tick do PgQue (se aceito) é um processo próprio de longa duração
+   (`Deployment`), não `pg_cron` nem `CronJob`. Enquanto `Proposta`, o stack
+   continua com uma única instância PostgreSQL.
 3. Check `docs/references/` to understand what sources are in play (36 fontes).
 4. Ask the user what they want to work on before creating files.
 5. If the user provides new reference URLs, create reference files first,

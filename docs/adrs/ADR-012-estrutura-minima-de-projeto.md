@@ -247,14 +247,20 @@ Copie `.env.example` para `.env` e ajuste os valores:
 cp .env.example .env
 ```
 
-Variáveis obrigatórias (ver ADR-016 para a separação de credenciais de banco):
+Variáveis obrigatórias (ver ADR-016 para a separação de credenciais de banco e a
+Revisão 2026-07-04 para o formato explícito sem credencial embutida na URL):
 
 ```bash
+# Servidor/porta/banco — sem credencial; nunca muda entre os dois papéis abaixo
+POSTGRESQL_APP_URL=postgresql://localhost:5432/db-app
+
 # Aplicação — usuário DML (SELECT, INSERT, UPDATE, DELETE)
-POSTGRESQL_URL=postgresql://myapp_app:dev_password@localhost/myapp
+POSTGRESQL_APP_USERNAME=myapp_app
+POSTGRESQL_APP_PASSWORD=dev_password
 
 # Migration — usuário DDL (CREATE, ALTER, DROP) — usado pelo eng/migrate.pl
-POSTGRESQL_MIGRATION_URL=postgresql://myapp_migrate:dev_password@localhost/myapp
+POSTGRESQL_APP_MIGRATION_USERNAME=myapp_migrate
+POSTGRESQL_APP_MIGRATION_PASSWORD=dev_password
 
 # RabbitMQ
 RABBITMQ_HOST=localhost

@@ -17,3 +17,6 @@ cloud-native.
 
 ## Referenciada em
 - ADR-016: Acesso a Dados Relacional — Mojo::Pg e Migrations
+- [ADR-022](../adrs/ADR-022-filas-em-postgresql.md): proposta (não aceita) de
+  filas em PostgreSQL — todo acesso ao PgQue seria feito via `Mojo::Pg`, sem
+  dependência XS nova

@@ -71,8 +71,11 @@ Em desenvolvimento local, um único usuário com privilégios completos serve pa
 
 ```bash
 # .env
-POSTGRESQL_URL=postgresql://stega_app:senha_app@localhost:5432/stega
-POSTGRESQL_MIGRATION_URL=postgresql://stega_migrate:senha_migrate@localhost:5432/stega
+POSTGRESQL_APP_URL=postgresql://localhost:5432/stega
+POSTGRESQL_APP_USERNAME=stega_app
+POSTGRESQL_APP_PASSWORD=senha_app
+POSTGRESQL_APP_MIGRATION_USERNAME=stega_migrate
+POSTGRESQL_APP_MIGRATION_PASSWORD=senha_migrate
 ```
 
 ---

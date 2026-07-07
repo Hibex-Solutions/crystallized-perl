@@ -55,6 +55,7 @@ package Stega;
 use Mojo::Base 'Mojolicious', -strict;
 
 use Mojo::Pg;
+use Mojo::URL;
 
 sub startup {
     my $self = shift;
@@ -65,10 +66,12 @@ sub startup {
 sub _setup_database {
     my $self = shift;
 
-    my $dsn = $ENV{POSTGRESQL_URL}
-        // 'postgresql://postgres:postgres_dev@localhost:5432/stega';
+    # POSTGRESQL_APP_URL nunca carrega credencial (ver Revisão 2026-07-04 da ADR-016)
+    my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL} // 'postgresql://localhost:5432/stega');
+    $conn->userinfo(($ENV{POSTGRESQL_APP_USERNAME} // 'postgres') . ':'
+        . ($ENV{POSTGRESQL_APP_PASSWORD} // 'postgres_dev'));
 
-    my $pg = Mojo::Pg->new($dsn);
+    my $pg = Mojo::Pg->new($conn);
     $pg->options->{pg_enable_utf8} = -1;    # auto: usa o encoding do servidor (UTF-8)
     $self->helper(pg => sub { $pg });
 }
@@ -147,11 +150,13 @@ $| = 1;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 use Mojo::Pg;
+use Mojo::URL;
 
-my $pg = Mojo::Pg->new(
-    $ENV{POSTGRESQL_MIGRATION_URL}
-        // 'postgresql://myapp_migrate:dev_password@localhost/myapp'
-);
+my $conn = Mojo::URL->new($ENV{POSTGRESQL_APP_URL} // 'postgresql://localhost:5432/stega');
+$conn->userinfo(($ENV{POSTGRESQL_APP_MIGRATION_USERNAME} // 'myapp_migrate') . ':'
+    . ($ENV{POSTGRESQL_APP_MIGRATION_PASSWORD} // 'dev_password'));
+
+my $pg = Mojo::Pg->new($conn);
 
 my $migrations = $pg->migrations->name('stega')
     ->from_dir("$FindBin::Bin/../migrations");
@@ -182,11 +187,13 @@ usuário com privilégios DDL.
 
 ### Dois usuários: DDL e DML
 
-Em produção, `POSTGRESQL_MIGRATION_URL` (usuário com `CREATE`/`ALTER`/`DROP`) e
-`POSTGRESQL_URL` (usuário restrito a `SELECT`/`INSERT`/`UPDATE`/`DELETE`) são
-credenciais **distintas** — a aplicação em si nunca tem privilégio para alterar o
-schema. Em desenvolvimento local, as duas variáveis apontam para o mesmo usuário por
-simplicidade. Os comandos `GRANT` completos estão na ADR-016.
+Em produção, `POSTGRESQL_APP_MIGRATION_USERNAME`/`_PASSWORD` (usuário com
+`CREATE`/`ALTER`/`DROP`) e `POSTGRESQL_APP_USERNAME`/`_PASSWORD` (usuário restrito a
+`SELECT`/`INSERT`/`UPDATE`/`DELETE`) são credenciais **distintas** — a aplicação em
+si nunca tem privilégio para alterar o schema. As duas compartilham o mesmo
+`POSTGRESQL_APP_URL` (servidor/porta/banco, sem credencial — ver Revisão 2026-07-04
+da ADR-016). Em desenvolvimento local, as duas credenciais apontam para o mesmo
+usuário por simplicidade. Os comandos `GRANT` completos estão na ADR-016.
 
 ---
 
