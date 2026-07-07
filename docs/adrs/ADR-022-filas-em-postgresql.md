@@ -50,7 +50,7 @@ do stack para dados relacionais (ADR-007), documentos JSONB (ADR-017) **e filas*
 eliminando RabbitMQ, `Net::AMQP::RabbitMQ` e qualquer cliente AMQP do stack.
 
 Mecanismo concreto proposto: **PgQue** (SQL puro + PL/pgSQL, licença Apache-2.0,
-<https://pgque.dev>) assume o papel de log de eventos multi-consumidor que o
+[pgque.dev](https://pgque.dev)) assume o papel de log de eventos multi-consumidor que o
 RabbitMQ tem hoje. **Minion permanece inalterado** para a fila de jobs interna — as
 duas camadas continuam distintas por escopo, só que ambas agora vivem inteiramente
 em PostgreSQL:
