@@ -253,7 +253,22 @@ SKIP LOCKED sob carga sustentada")* (ver seção 8 para o lado cético disso).
   30s, `pgque_rotate_step2` a cada 10s); ou um processo nosso chamando
   `pgque.ticker()` diretamente (não `ticker_loop()` — essa é de uso interno do
   `pg_cron`) em loop apertado, mais `pgque.maint()`/`maint_retry_events()`
-  periodicamente. Esta ADR opta pela segunda via — ver seção 9.
+  periodicamente (~30s) **e `pgque.maint_rotate_tables_step2()` periodicamente
+  (~10s), em transação própria**. O step2 não está embutido no `maint()` —
+  verificado no código (`sql/pgque.sql`): `maint()` **pula deliberadamente**
+  `maint_rotate_tables_step2` (o PgQ exige step1 e step2 em transações
+  separadas), e `maint_rotate_tables_step1()` só rotaciona quando
+  `queue_switch_step2 is not null`, campo que ele mesmo zera ao rotacionar.
+  Consequência: um ticker externo que só chame
+  `ticker()`+`maint()`+`maint_retry_events()` — **exatamente a receita da
+  página "Option C — manual or external scheduler" da documentação oficial do
+  PgQue, que omite o step2** — faz uma rotação e nunca mais rotaciona; o
+  "zero-bloat" para silenciosamente, sem erro. A receita correta para um
+  agendador externo é replicar o que `pgque.start()` agenda no `pg_cron`
+  (incluindo o step2 a cada 10s). Cada chamada de `ticker()` também precisa de
+  commit antes da próxima (documentado pelo projeto; com `Mojo::Pg`, cada
+  `query()` fora de transação já é autocommit). Esta ADR opta pela segunda
+  via — ver seção 9.
 - Latência ponta-a-ponta: ~50–52ms mediana com tick padrão de 100ms, ajustável de
   1 a 1000ms. Não é para dispatch sub-milissegundo.
 - Modelo: cada consumidor mantém seu próprio cursor sobre um **log de eventos
@@ -300,10 +315,14 @@ externa.
 consumo de uma fila cooperativamente (como "consumer groups" do Kafka).
 
 **Papéis**: `pgque_reader`, `pgque_writer`, `pgque_admin` (admin contém os outros
-dois). **Globais por banco de dados, não por fila** — se aplicações mutuamente
-não-confiáveis compartilhassem o mesmo banco, precisariam de isolamento adicional em
-nível de schema. Não é um problema para o stack hoje (um único banco por
-aplicação), mas é uma limitação a registrar.
+dois), criados pelo próprio `pgque.sql` de forma idempotente. **As permissões
+valem para todas as filas do banco, não por fila** — se aplicações mutuamente
+não-confiáveis compartilhassem o mesmo banco, precisariam de isolamento adicional
+em nível de schema. E, como todo `ROLE` do Postgres, os papéis em si são objetos
+do **cluster** inteiro (a instância), não de um banco — dois bancos com PgQue na
+mesma instância compartilham os mesmos três papéis. Não é um problema para o
+stack (um único banco por aplicação; e com a ADR-023 a instância `db-events` é
+dedicada), mas é uma limitação a registrar.
 
 ### Maturidade
 
@@ -314,8 +333,19 @@ aplicação), mas é uma limitação a registrar.
   década na Skype — **mas o empacotamento PgQue em si é novo**. Não confundir a
   maturidade do algoritmo com a maturidade deste projeto específico.
 - Sem suporte nativo, hoje, a: entrega atrasada/agendada (`send_at` — no roadmap),
-  wake-up via `LISTEN`/`NOTIFY` (no roadmap; hoje o consumidor faz polling no tick),
   métricas OpenTelemetry (no roadmap), CLI de administração (no roadmap).
+- Wake-up via `LISTEN`/`NOTIFY` **existe na v0.2.0** *(correção 2026-07-07 —
+  uma versão anterior deste estudo o listava, incorretamente, como "no
+  roadmap")*: `pgque.ticker()` emite `pg_notify('pgque_<fila>', tick_id)` a
+  cada tick — verificado em `sql/pgque.sql` (comentário do próprio código:
+  "PgQue transformation: LISTEN/NOTIFY wakeup (not in original PgQ)") e
+  documentado em `docs/concepts.md` do projeto ("a lossy wakeup hint after
+  each tick ... they still poll `receive()`, the notify is only a nudge").
+  É um aceno *lossy*: o `receive()` continua sendo a fonte da verdade, o
+  NOTIFY só acorda o consumidor sem busy-wait — o mesmo papel do
+  `listen('minion.job')` no `Minion::Backend::Pg` (seção 3.5). É daí que vem
+  o limite de 57 bytes no nome da fila: `pgque_<fila>` precisa caber nos 63
+  bytes de um canal de NOTIFY do Postgres.
 - `pg_cron` grava em `cron.job_run_details` sem purga automática; usar PgQue com
   `pg_cron` adiciona 4 jobs periódicos que exigem purga manual dessa tabela ou
   desabilitar `cron.log_run`.
@@ -422,7 +452,11 @@ sub run {
         )->hashes;
 
         unless (@$rows) {
-            sleep 1;    # sem wake-up nativo via LISTEN/NOTIFY na v0.2 — polling simples no intervalo do tick
+            # Polling simples como base. O PgQue emite
+            # pg_notify('pgque_stega.notifications', tick_id) a cada tick —
+            # este sleep pode ser trocado por uma espera no canal (ver nota
+            # após o exemplo), mantendo o receive() como fonte da verdade.
+            sleep 1;
             next;
         }
 
@@ -458,11 +492,15 @@ ADR-016. `$app->pg_events` é um helper **novo**, registrado no `startup()` de
 (credencial D) — assim como `$app->pg` (db-app) e o `Mojo::Pg` interno do Minion
 (db-jobs) já são três conexões distintas, não uma reaproveitada nas outras (ver
 seção "Conexões da aplicação" na ADR-023). O `sleep 1` no lugar do `$mq->recv(0)`
-bloqueante é uma
-regressão de eficiência real em relação ao RabbitMQ (polling em vez de espera
-bloqueante) — mitigável hoje combinando `LISTEN`/`NOTIFY` manual (seção 3.2) como
-sinal de "acordar", já que PgQue ainda não oferece isso nativamente (está no
-roadmap).
+bloqueante troca espera bloqueante por polling — mas a mitigação já vem pronta
+no próprio PgQue *(correção 2026-07-07 — ver "Maturidade" acima)*: cada tick
+emite `pg_notify('pgque_<fila>', tick_id)`, então o worker pode escutar esse
+canal (`$pg_events->db->listen('pgque_stega.notifications')` e esperar
+notificação com timeout) e usar o NOTIFY como sinal de "acordar", mantendo o
+`receive()` periódico como rede de segurança — o mesmo padrão listen-com-timeout
+que o `Minion::Backend::Pg` já usa (seção 3.5). O exemplo acima fica no `sleep 1`
+por simplicidade; a versão com LISTEN é uma otimização de latência/carga, não um
+requisito de correção.
 
 ---
 
@@ -665,7 +703,8 @@ Ações que a aceitação desta ADR implicaria (nenhuma executada agora — a AD
 - **Guia 9** (`09-containerizacao-e-deployment.md`): manifests Kubernetes — remover
   o `Deployment`/`Service` do RabbitMQ; adicionar um novo `Deployment` de ticker
   (processo de longa duração, réplica única, chamando `pgque.ticker()` em loop,
-  mais `maint()`/`maint_retry_events()` periodicamente — ver `Decisão`). O
+  mais `maint()`/`maint_retry_events()` a ~30s e `maint_rotate_tables_step2()`
+  a ~10s em transação própria — ver `Decisão`). O
   Dockerfile deixa de instalar `librabbitmq-dev`/`librabbitmq4`.
 - **`docs/references/rabbitmq.md`**: mantido para registro histórico (a ADR-008
   revogada ainda o referencia — ADR-000 exige preservar arquivos de ADRs
@@ -783,6 +822,12 @@ depende de `rabbitmq`/usa `RABBITMQ_HOST`; ao migrar, passa a depender de
 
 ## 11. Pontos que exigem confirmação explícita antes de aceitar
 
+> **Revisão 2026-07-07 — confirmação registrada**: os três pontos abaixo foram
+> revisados explicitamente com o usuário; os riscos foram analisados e estão
+> **aceitos como propostos** (ver as notas "Revisão 2026-07-07" na ADR-022 —
+> pontos 1 e 3 — e na ADR-023 — ponto 2). A lista permanece aqui como registro
+> do que foi avaliado, não como pendência.
+
 Esta ADR (seção `Decisão`) já toma uma posição em cada um destes pontos para
 ser uma proposta concreta, não uma lista de opções em aberto — mas são
 decisões reais de arquitetura, não detalhes de implementação triviais, e você
@@ -791,8 +836,11 @@ deve revisar cada uma explicitamente antes de aceitar:
 1. **Mecanismo de tick**: um processo próprio, de longa duração (`Deployment`,
    réplica única, mesmo molde do `NotificationWorker`/worker do Minion) chama
    `pgque.ticker()` em loop apertado (~100ms-1s), mais
-   `maint()`/`maint_retry_events()` periodicamente — não `pg_cron`, não
-   `CronJob` do Kubernetes (a granularidade mínima de 1 minuto do `CronJob`
+   `maint()`/`maint_retry_events()` periodicamente (~30s) e
+   `maint_rotate_tables_step2()` periodicamente (~10s, em transação própria —
+   obrigatório: sem ele a rotação trava após a primeira execução e o
+   anti-bloat para em silêncio; ver seção 4, "Como funciona") — não `pg_cron`,
+   não `CronJob` do Kubernetes (a granularidade mínima de 1 minuto do `CronJob`
    não atinge a cadência que o PgQue precisa, a menos que o próprio comando
    implemente um laço interno de alta frequência — e nesse caso um
    `Deployment` sempre ativo é mais simples, sem lidar com sobreposição de

@@ -15,7 +15,9 @@ criado na Skype) usando batching por snapshot e rotação via `TRUNCATE` em vez 
 `ack`, `nack`), dead-letter queue (`dlq_inspect`, `dlq_replay`, `dlq_purge`) e
 observabilidade (`get_queue_info`, `get_consumer_info`). Requer PostgreSQL 14+ e,
 para o "tick" automático de rotação, `pg_cron` (ou um agendador externo chamando
-`pgque.ticker_loop()`).
+`pgque.ticker()` em loop, mais as funções de manutenção — incluindo
+`pgque.maint_rotate_tables_step2()`, que não está embutida em `pgque.maint()`;
+`pgque.ticker_loop()` é de uso interno do `pg_cron`, ver ADR-022).
 
 Candidato central na [ADR-022](../adrs/ADR-022-filas-em-postgresql.md) (proposta,
 ainda não aceita) para substituir o RabbitMQ ([ADR-008](../adrs/ADR-008-message-broker-rabbitmq.md))

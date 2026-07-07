@@ -14,6 +14,18 @@
 > Postgres, um por finalidade) é decidida separadamente na
 > [ADR-023](ADR-023-topologia-de-instancias-postgresql.md) — também `Proposta`.
 
+**Revisão 2026-07-07 — riscos analisados e aceitos**: os pontos de decisão da
+seção 11 do estudo anexo que pertencem a esta ADR foram revisados
+explicitamente com o usuário e os riscos estão **aceitos como propostos**:
+(1) o mecanismo de tick via processo próprio de longa duração (`Deployment`,
+réplica única obrigatória — o PgQue não coordena tickers externos
+concorrentes), aceitando o custo de mais um processo persistente em troca de
+manter a imagem `postgres:17-alpine` intocada; (2) o risco de maturidade do
+PgQue (v0.2.0, "early-stage"), aceito com a Opção C do estudo (Postgres puro,
+sem PgQue) mantida como plano B documentado caso o risco se materialize.
+Nenhuma questão pendente resta nesta ADR além da própria mudança de status
+para `Aceita`.
+
 ## Contexto
 
 A [ADR-008](ADR-008-message-broker-rabbitmq.md) define RabbitMQ, acessado via
@@ -66,10 +78,22 @@ HTTP Handler → $c->minion->enqueue(...)
 **Tick de rotação**: um **processo próprio, de longa duração** (`Deployment`,
 mesmo molde do `NotificationWorker`/worker do Minion — não um `CronJob` do
 Kubernetes) chama `pgque.ticker()` em loop apertado (~100ms-1s), mais
-`pgque.maint()`/`maint_retry_events()` periodicamente (~30s) — não `pg_cron`.
+`pgque.maint()`/`maint_retry_events()` periodicamente (~30s) **e
+`pgque.maint_rotate_tables_step2()` periodicamente (~10s), sempre em transação
+própria** — não `pg_cron`. O step2 **não é opcional** nem está embutido no
+`maint()`: `maint()` o pula deliberadamente (o PgQ exige step1 e step2 em
+transações separadas), e a rotação seguinte só acontece depois que o step2
+registrou a anterior — um ticker externo que o omita faz **uma** rotação e
+nunca mais rotaciona, e o anti-bloat (a razão central desta escolha) para
+silenciosamente (ver seção 11 do estudo anexo, que verifica isso no
+código-fonte; a página de instalação do próprio PgQue, "Option C — manual or
+external scheduler", omite o step2 — a receita a replicar é o que
+`pgque.start()` agenda no `pg_cron`, não essa página).
 `pgque.ticker_loop()` é de uso interno do `pg_cron` (é o que ele agenda a cada
 1s, e essa procedure faz sub-tick de 100ms por dentro); um processo externo
-chama `pgque.ticker()` diretamente. Um `CronJob` do Kubernetes não atingiria a
+chama `pgque.ticker()` diretamente, com commit entre uma chamada e a próxima
+(com `Mojo::Pg`, cada `query()` fora de transação já é autocommit). Um
+`CronJob` do Kubernetes não atingiria a
 cadência necessária sozinho (granularidade mínima de 1 minuto) — só serviria
 se o próprio comando implementasse um laço interno de alta frequência antes de
 sair, e nesse caso um `Deployment` sempre ativo é mais simples (sem lidar com
@@ -170,8 +194,10 @@ Referências: [PostgreSQL](../references/postgresql.md), [PgQue](../references/p
   para rodar `t/070_notifications.t` — passa a depender de `postgres-events`
   e usar `POSTGRESQL_EVENTS_URL`/`_USERNAME`/`_PASSWORD`, ver ADR-023), e a
   instalação de `librabbitmq-dev`/`librabbitmq4` do Dockerfile
-- Instalar `pgque.sql` e criar os papéis `pgque_reader`/`pgque_writer`/`pgque_admin`
-  no banco da Stega
+- Instalar `pgque.sql` no banco da Stega — o próprio script cria os papéis
+  `pgque_reader`/`pgque_writer`/`pgque_admin` de forma idempotente; o que o
+  bootstrap acrescenta é a concessão de `pgque_admin` à credencial que se
+  conecta a esse banco
 - Reescrever `Stega::Worker::NotificationWorker` e os jobs Minion que publicam
   eventos (`SendWelcomeNotification`, `CheckSlaBreaches`, `GenerateActivityReport`)
   para usar `pgque.send()`/`receive()`/`ack()`/`nack()` via `Mojo::Pg`
@@ -179,14 +205,17 @@ Referências: [PostgreSQL](../references/postgresql.md), [PgQue](../references/p
 - Remover as variáveis `RABBITMQ_HOST`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`,
   `RABBITMQ_VHOST` e `RABBITMQ_PORT` — nenhuma substituta é necessária, já que o
   PgQue é acessado pela mesma conexão Postgres da aplicação (`POSTGRESQL_APP_URL`
-  e credenciais associadas) ou, se a ADR-023 também for aceita, por
+  e credenciais associadas — formato da Revisão 2026-07-04 da ADR-016; a Stega
+  hoje ainda usa o formato antigo `POSTGRESQL_URL`, ver o pré-requisito
+  equivalente nas Ações da ADR-023) ou, se a ADR-023 também for aceita, por
   `POSTGRESQL_EVENTS_URL`/`_USERNAME`/`_PASSWORD` — não por um protocolo próprio
   com host/usuário/senha separados
 - Atualizar a lista de variáveis de ambiente documentada na ADR-021
   (`Stega::Config`) — remove a chave `rabbitmq` do hashref de configuração
 - Criar o processo/`Deployment` de ticker (`pgque.ticker()` em loop, mais
-  `maint()`/`maint_retry_events()` periodicamente) no Kubernetes e o
-  equivalente em Docker Compose para desenvolvimento
+  `maint()`/`maint_retry_events()` a ~30s e `maint_rotate_tables_step2()` a
+  ~10s em transação própria — ver "Tick de rotação" na Decisão) no Kubernetes
+  e o equivalente em Docker Compose para desenvolvimento
 - Reescrever o Guia 8 e atualizar os manifests Kubernetes do Guia 9 (remover
   `Deployment`/`Service` do RabbitMQ, adicionar o `Deployment` de ticker)
 - Remover a exceção "Windows nativo" do Guia 8 e da ADR-014

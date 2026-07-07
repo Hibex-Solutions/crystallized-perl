@@ -10,6 +10,14 @@
 > status permanecer `Proposta`, o stack continua com uma única instância PostgreSQL
 > compartilhada, como descrito hoje na ADR-016 e na nota "Minion" da ADR-008.
 
+**Revisão 2026-07-07 — riscos analisados e aceitos**: o ponto de decisão da
+seção 11 do estudo anexo à ADR-022 que pertence a esta ADR — exigir as
+instâncias PostgreSQL separadas **também em desenvolvimento** (quatro
+containers no Docker Compose, ambiente local mais pesado), em nome da paridade
+dev/produção — foi revisado explicitamente com o usuário e o custo está
+**aceito como proposto**. Nenhuma questão pendente resta nesta ADR além da
+própria mudança de status para `Aceita`.
+
 ## Contexto
 
 Hoje o stack usa uma única instância PostgreSQL para tudo: dados relacionais
@@ -307,6 +315,16 @@ que o achado da PlanetScale descreve.
   aplicação")
 
 **Ações necessárias** *(somente quando esta ADR for aceita — nenhuma executada agora)*:
+- **Pré-requisito**: a Stega hoje ainda usa o formato **antigo** de variáveis de
+  conexão (`POSTGRESQL_URL`/`POSTGRESQL_MIGRATION_URL`, com credenciais embutidas
+  na URL — ver `Stega::Config` e `compose.yml` atuais), anterior à Revisão
+  2026-07-04 da ADR-016. Migrar `Stega::Config`, `compose.yml`, `eng/migrate.pl`/
+  `eng/seed.pl` e `Stega.pm::_setup_database` para o formato
+  `POSTGRESQL_APP_URL` + `POSTGRESQL_APP_USERNAME`/`_PASSWORD` (+
+  `_MIGRATION_*`) vem **antes** (ou junto) da implementação desta ADR — os
+  sufixos `JOBS`/`EVENTS` pressupõem esse formato já em vigor, e é nesse passo
+  que se resolve o item "A validar na implementação" da própria ADR-016
+  (escape de caracteres especiais em `Mojo::URL->userinfo`)
 - Atualizar `Stega.pm::startup`: registrar o Minion com uma instância `Mojo::Pg`
   própria para `db-jobs` (`POSTGRESQL_JOBS_URL` + credencial C) — **parar** de
   reaproveitar `Pg => $self->pg`; se a ADR-022 também for aceita, registrar o

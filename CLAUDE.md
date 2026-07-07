@@ -388,6 +388,11 @@ Follow this sequence when resuming work on this project:
    completo anexado em `docs/adrs/references/ADR-022-estudo-filas-postgresql.md`.
    Enquanto o status permanecer `Proposta`, a ADR-008 continua `Aceita` e em vigor —
    não tratar RabbitMQ como removido do stack até o usuário aceitar a ADR-022.
+   Em 2026-07-07 a proposta foi revisada contra o código real do PgQue e da Stega
+   (correções: `maint_rotate_tables_step2()` obrigatório no ticker externo;
+   LISTEN/NOTIFY existe na v0.2.0) e **os riscos da seção 11 do estudo foram
+   analisados e aceitos pelo usuário** (ver notas "Revisão 2026-07-07" nas duas
+   ADRs) — não re-perguntar sobre eles; falta só a mudança formal de status.
    **ADR-023 (Proposta, 2026-07-04, revisada 2026-07-07)** — ortogonal à
    ADR-022: propõe uma instância PostgreSQL dedicada por finalidade (`db-app`,
    `db-jobs`, `db-events`, e `postgres-keycloak` dedicado ao Keycloak) em vez de
