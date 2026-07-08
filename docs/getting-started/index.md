@@ -76,8 +76,8 @@ A Stega foi escolhida porque exercita **todos** os componentes do stack:
 - Frontend server-rendered com autenticação Keycloak (OIDC)
 - API REST com contrato OpenAPI v3
 - PostgreSQL com JSONB, busca full-text e migrations
-- Fila local de jobs com Minion (PostgreSQL backend)
-- Worker de notificações com RabbitMQ (AMQP 0-9-1)
+- Fila local de jobs com Minion (PostgreSQL backend, instância `db-jobs`)
+- Worker de notificações com PgQue (PostgreSQL, instância `db-events`)
 
 Você não implementa a Stega do zero nos guias. Os guias usam o **repositório
 `hibex-solutions/crystallized-perl-stega`** como contexto e focam no aspecto

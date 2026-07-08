@@ -235,9 +235,10 @@ stringData:
   POSTGRESQL_APP_PASSWORD:           "senha_app"
   POSTGRESQL_APP_MIGRATION_USERNAME: "myapp_migrate"
   POSTGRESQL_APP_MIGRATION_PASSWORD: "senha_migrate"
-  RABBITMQ_HOST:         "rabbitmq-svc"
-  RABBITMQ_USER:         "myapp"
-  RABBITMQ_PASSWORD:     "password"
+  POSTGRESQL_JOBS_USERNAME:          "myapp_jobs"
+  POSTGRESQL_JOBS_PASSWORD:          "senha_jobs"
+  POSTGRESQL_EVENTS_USERNAME:        "myapp_events"
+  POSTGRESQL_EVENTS_PASSWORD:        "senha_events"
   KEYCLOAK_CLIENT_SECRET: "secret"
 
 ---

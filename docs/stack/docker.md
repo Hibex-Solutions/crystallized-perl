@@ -15,7 +15,7 @@ title: Docker + Docker Compose
 ## Por que Docker
 
 Todo serviço do stack roda em container. Isso garante:
-- **Paridade dev/prod**: mesmas versões do Perl, PostgreSQL, RabbitMQ e Keycloak em todos os ambientes
+- **Paridade dev/prod**: mesmas versões do Perl, PostgreSQL (quatro instâncias por finalidade, ADR-023) e Keycloak em todos os ambientes
 - **Builds reprodutíveis**: o `cpanfile.snapshot` garante os mesmos módulos em cada `docker build`
 - **Isolamento**: cada serviço vive em seu próprio processo sem dependências do SO host
 
@@ -95,14 +95,17 @@ services:
       - .:/app              # monta código local — alterações refletidas em tempo real
       - /app/local          # volume anônimo para local/ não ser sobrescrito
     environment:
-      POSTGRESQL_APP_URL: postgresql://postgres:5432/stega
+      POSTGRESQL_APP_URL: postgresql://postgres-app:5432/stega-app
       POSTGRESQL_APP_USERNAME: stega_app
       POSTGRESQL_APP_PASSWORD: dev_password
       POSTGRESQL_APP_MIGRATION_USERNAME: stega_migrate
       POSTGRESQL_APP_MIGRATION_PASSWORD: dev_password
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: stega
-      RABBITMQ_PASSWORD: dev_password
+      POSTGRESQL_JOBS_URL: postgresql://postgres-jobs:5432/stega-jobs
+      POSTGRESQL_JOBS_USERNAME: stega_jobs
+      POSTGRESQL_JOBS_PASSWORD: dev_password
+      POSTGRESQL_EVENTS_URL: postgresql://postgres-events:5432/stega-events
+      POSTGRESQL_EVENTS_USERNAME: stega_events
+      POSTGRESQL_EVENTS_PASSWORD: dev_password
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: stega
       KEYCLOAK_CLIENT_ID: stega-api
@@ -112,12 +115,18 @@ services:
       - "3000:3000"
     command: carton exec perl script/stega daemon --listen http://*:3000
     depends_on:
-      postgres:
+      postgres-app:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      bootstrap-pgque:
+        condition: service_completed_successfully
 
-  # Worker Minion
+  # Worker Minion — o BACKEND do Minion usa instância própria (db-jobs),
+  # nunca reaproveita db-app (ADR-023). Mas o processo inteiro ainda precisa
+  # de db-app/db-events também: Stega.pm::startup configura as três
+  # instâncias Mojo::Pg incondicionalmente, e os Jobs em si (ex.:
+  # ProcessWebhookPayload) usam $app->pg (db-app) e $app->pg_events
+  # (db-events) para fazer seu trabalho — só o backend de agendamento do
+  # próprio Minion é que fica isolado em db-jobs.
   minion-worker:
     build:
       context: .
@@ -126,15 +135,25 @@ services:
       - .:/app
       - /app/local
     environment:
-      POSTGRESQL_APP_URL: postgresql://postgres:5432/stega
+      POSTGRESQL_APP_URL: postgresql://postgres-app:5432/stega-app
       POSTGRESQL_APP_USERNAME: stega_app
       POSTGRESQL_APP_PASSWORD: dev_password
+      POSTGRESQL_JOBS_URL: postgresql://postgres-jobs:5432/stega-jobs
+      POSTGRESQL_JOBS_USERNAME: stega_jobs
+      POSTGRESQL_JOBS_PASSWORD: dev_password
+      POSTGRESQL_EVENTS_URL: postgresql://postgres-events:5432/stega-events
+      POSTGRESQL_EVENTS_USERNAME: stega_events
+      POSTGRESQL_EVENTS_PASSWORD: dev_password
     command: carton exec perl script/stega minion worker
     depends_on:
-      postgres:
+      postgres-app:
+        condition: service_healthy
+      postgres-jobs:
+        condition: service_healthy
+      postgres-events:
         condition: service_healthy
 
-  # Worker de notificações RabbitMQ
+  # Worker de notificações — consumidor PgQue (ADR-022)
   notification-worker:
     build:
       context: .
@@ -143,53 +162,130 @@ services:
       - .:/app
       - /app/local
     environment:
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: stega
-      RABBITMQ_PASSWORD: dev_password
-    command: carton exec perl eng/worker.pl
+      POSTGRESQL_EVENTS_URL: postgresql://postgres-events:5432/stega-events
+      POSTGRESQL_EVENTS_USERNAME: stega_events
+      POSTGRESQL_EVENTS_PASSWORD: dev_password
+    command: carton exec perl script/worker
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      bootstrap-pgque:
+        condition: service_completed_successfully
 
-  postgres:
+  # Tick de rotação do PgQue — replicas: 1 obrigatório (ADR-022)
+  pgque-ticker:
+    build:
+      context: .
+      target: build
+    volumes:
+      - .:/app
+      - /app/local
+    environment:
+      POSTGRESQL_EVENTS_URL: postgresql://postgres-events:5432/stega-events
+      POSTGRESQL_EVENTS_USERNAME: stega_events
+      POSTGRESQL_EVENTS_PASSWORD: dev_password
+    command: carton exec perl script/pgque_ticker
+    depends_on:
+      bootstrap-pgque:
+        condition: service_completed_successfully
+
+  # Instala pgque.sql em db-events — passo idempotente, separado de migrations (ADR-023)
+  bootstrap-pgque:
+    build:
+      context: .
+      target: build
+    volumes:
+      - .:/app
+      - /app/local
+    environment:
+      POSTGRESQL_EVENTS_URL: postgresql://postgres-events:5432/stega-events
+      POSTGRESQL_EVENTS_USERNAME: stega_events
+      POSTGRESQL_EVENTS_PASSWORD: dev_password
+    command: carton exec perl eng/bootstrap_pgque.pl
+    depends_on:
+      postgres-events:
+        condition: service_healthy
+    restart: "no"
+
+  postgres-app:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB:       stega
+      POSTGRES_DB:       stega-app
       POSTGRES_USER:     stega_migrate
       POSTGRES_PASSWORD: dev_password
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_app_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stega_migrate -d stega"]
+      test: ["CMD-SHELL", "pg_isready -U stega_migrate -d stega-app"]
       interval: 5s
       retries: 5
 
-  rabbitmq:
-    image: rabbitmq:4.3-management
+  postgres-jobs:
+    image: postgres:17-alpine    # mesma imagem, instância de propósito único (ADR-023)
     environment:
-      RABBITMQ_DEFAULT_USER: stega
-      RABBITMQ_DEFAULT_PASS: dev_password
+      POSTGRES_DB:       stega-jobs
+      POSTGRES_USER:     stega_jobs
+      POSTGRES_PASSWORD: dev_password
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "55433:5432"
+    volumes:
+      - postgres_jobs_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U stega_jobs -d stega-jobs"]
+      interval: 5s
+      retries: 5
+
+  postgres-events:
+    image: postgres:17-alpine    # imagem intocada — sem pg_cron nem extensão custom
+    environment:
+      POSTGRES_DB:       stega-events
+      POSTGRES_USER:     stega_events
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "55434:5432"
+    volumes:
+      - postgres_events_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stega_events -d stega-events"]
+      interval: 5s
+      retries: 5
+
+  postgres-keycloak:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB:       keycloak
+      POSTGRES_USER:     keycloak
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "55435:5432"
+    volumes:
+      - postgres_keycloak_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
       retries: 5
 
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
     command: start-dev
+    depends_on:
+      postgres-keycloak:
+        condition: service_healthy
     environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: dev_password
       KEYCLOAK_ADMIN:          admin
       KEYCLOAK_ADMIN_PASSWORD: admin
     ports:
       - "8080:8080"
 
 volumes:
-  postgres_data:
+  postgres_app_data:
+  postgres_jobs_data:
+  postgres_events_data:
+  postgres_keycloak_data:
 ```
 
 ---
@@ -204,7 +300,7 @@ docker compose up
 docker compose up -d
 
 # Subir apenas serviços de apoio (sem a aplicação)
-docker compose up -d postgres rabbitmq keycloak
+docker compose up -d postgres-app postgres-jobs postgres-events postgres-keycloak keycloak
 
 # Executar um comando dentro do container da aplicação
 docker compose exec app carton exec perl eng/migrate.pl

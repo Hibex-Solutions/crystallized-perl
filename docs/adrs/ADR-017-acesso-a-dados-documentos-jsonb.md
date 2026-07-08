@@ -277,5 +277,6 @@ Não afetado por este bug (nenhuma mudança necessária): `eng/seed.pl` usa
 `'{...}'::jsonb` como **literal embutido na própria string SQL**, não como bind
 parameter — mecanismo diferente, sem o mesmo risco (confirmado: a `description` do
 produto do seed, com "ç"/"ã", já batia `octet_length` correto antes desta correção).
-`Stega::Job::SendWelcomeNotification` usa `JSON::PP::encode_json` para publicar no
-RabbitMQ, não para bind de banco — contexto diferente.
+`Stega::Notification::publish` serializa o payload via `{json => ...}` do próprio
+`Mojo::Pg` para `pgque.send()` (ADR-022), não via `JSON::PP::encode_json` manual —
+contexto diferente do bug de bind de banco descrito acima.

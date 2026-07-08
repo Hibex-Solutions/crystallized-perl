@@ -1,18 +1,18 @@
 # ADR-022: Filas em PostgreSQL — Revogação do RabbitMQ
 
-**Status**: Proposta
+**Status**: Aceita
 **Data**: 2026-07-04
+**Aceita em**: 2026-07-07
 
-> Esta ADR está em avaliação. Enquanto o status permanecer `Proposta`, a
-> [ADR-008](ADR-008-message-broker-rabbitmq.md) (RabbitMQ) continua `Aceita` e em
-> vigor — nada nesta ADR entra em efeito até que o usuário a aceite (ver revisão
-> 2026-07-04 da [ADR-000](ADR-000-padrao-de-adrs.md)). O estudo técnico completo que
-> fundamenta esta proposta — prós, contras, armadilhas, opções descartadas e
-> impacto detalhado no repositório e na Stega — está em
+> O estudo técnico completo que fundamenta esta decisão — prós, contras,
+> armadilhas, opções descartadas e impacto detalhado no repositório e na Stega —
+> está em
 > [`references/ADR-022-estudo-filas-postgresql.md`](references/ADR-022-estudo-filas-postgresql.md).
 > Esta ADR decide o **mecanismo** de filas; a topologia de instâncias (quantos
 > Postgres, um por finalidade) é decidida separadamente na
-> [ADR-023](ADR-023-topologia-de-instancias-postgresql.md) — também `Proposta`.
+> [ADR-023](ADR-023-topologia-de-instancias-postgresql.md) — aceita no mesmo dia.
+> A [ADR-008](ADR-008-message-broker-rabbitmq.md) (RabbitMQ) está `Substituída por
+> ADR-022` a partir desta aceitação.
 
 **Revisão 2026-07-07 — riscos analisados e aceitos**: os pontos de decisão da
 seção 11 do estudo anexo que pertencem a esta ADR foram revisados
@@ -23,8 +23,33 @@ concorrentes), aceitando o custo de mais um processo persistente em troca de
 manter a imagem `postgres:17-alpine` intocada; (2) o risco de maturidade do
 PgQue (v0.2.0, "early-stage"), aceito com a Opção C do estudo (Postgres puro,
 sem PgQue) mantida como plano B documentado caso o risco se materialize.
-Nenhuma questão pendente resta nesta ADR além da própria mudança de status
-para `Aceita`.
+Nenhuma questão pendente resta nesta ADR — status alterado para `Aceita` e
+implementação concluída na Stega no mesmo dia.
+
+**Revisão 2026-07-08 — correção: a "paridade nativa completa" não se estende ao
+Minion**: a validação da implementação em Windows nativo (sem Docker) encontrou
+`Minion workers do not support fork emulation` ao rodar `carton exec perl
+script/stega minion worker` e, por extensão, qualquer teste que chame
+`$app->minion->perform_jobs` (`t/030_webhooks.t`, `t/070_notifications.t`).
+Causa: `Minion.pm::worker()` (o módulo `Minion` em si, não código desta
+aplicação) recusa operar — `croak 'Minion workers do not support fork
+emulation'` — em qualquer Perl com `$Config{d_pseudofork}` verdadeiro, o caso do
+Strawberry/berrybrew no Windows (fork emulado via ithreads, sem `fork()` real do
+SO). Isso **não é causado por esta ADR nem introduzido pela migração para
+PgQue** — é uma restrição pré-existente do próprio Minion, presente desde antes
+desta ADR e independente do mecanismo de fila escolhido (existiria da mesma
+forma com RabbitMQ). O bullet "paridade nativa completa em qualquer
+plataforma" na seção Positivo abaixo estava incorreto por generalizar demais:
+é verdade que PgQue não exige compilador C nem exceção de plataforma, mas o
+Minion (ADR-008, inalterado por esta ADR) continua exigindo Docker Compose ou
+WSL2 para o processo `minion worker` especificamente no Windows nativo — ver a
+correção equivalente na ADR-014, seção Negativo. Testes afetados usam
+`plan skip_all => ... if $Config{d_pseudofork}` para não falhar falsamente
+nesse ambiente. Resolver essa exceção de vez — não só contorná-la — é
+pendência registrada na
+[ADR-024](ADR-024-jobs-assincronos-multiplataforma.md) (`Proposta`, sem
+decisão ainda; inclui um inventário de uso real do Minion nesta aplicação e a
+pergunta em aberto sobre se o PgQue sozinho cobriria os mesmos cenários).
 
 ## Contexto
 
@@ -36,9 +61,10 @@ PostgreSQL) não cobre.
 Na prática, essa decisão tem um problema recorrente e documentado: `Net::AMQP::RabbitMQ`
 é um módulo XS que embute a biblioteca C `librabbitmq`, e **não compila em Windows**
 — falha de link (`undefined reference to 'poll'`), não de teste, sem flag que
-contorne. Isso já é uma exceção registrada no [Guia 8](../guides/08-rabbitmq-e-minion.md)
+contorne. Essa era uma exceção registrada no [Guia 8](../guides/08-filas-com-pgque-e-minion.md)
 (rodar o worker via Docker Compose no Windows, enquanto o resto da aplicação roda
-com Perl nativo). Nenhuma alternativa Perl resolve isso sem trocar um problema por
+com Perl nativo) — removida com a aceitação desta ADR (ver "Ações necessárias").
+Nenhuma alternativa Perl resolve isso sem trocar um problema por
 outro: `Mojo::RabbitMQ::Client` está arquivado (2025-01-24, sem manutenção desde
 2019); `AnyEvent::RabbitMQ` é pure-Perl no protocolo, mas sua interface síncrona
 usual (`Net::RabbitFoot`) depende de `Coro` — outro módulo XS com histórico
@@ -157,8 +183,12 @@ Referências: [PostgreSQL](../references/postgresql.md), [PgQue](../references/p
   filas — um serviço a menos para operar, monitorar e manter credenciais
 - Elimina completamente a dependência XS/C (`librabbitmq`) do stack — nenhum
   módulo de fila exige compilador C no ambiente de desenvolvimento
-- Remove a exceção "Windows nativo precisa de Docker" do Guia 8/ADR-014 — paridade
-  nativa completa em qualquer plataforma
+- Remove a exceção "Windows nativo precisa de Docker" ligada especificamente ao
+  cliente RabbitMQ (`Net::AMQP::RabbitMQ`) do Guia 8/ADR-014 — mas **não** toda
+  exceção de plataforma: o Minion (ADR-008, não afetado por esta ADR) tem uma
+  limitação própria e pré-existente de `fork()` em Windows nativo, não
+  relacionada a filas nem à dependência XS eliminada aqui — ver "Revisão
+  2026-07-08" acima
 - Observabilidade de fila via SQL puro (`pgque.get_queue_info()` etc.), sem
   ferramenta externa (Management UI do RabbitMQ deixa de ser necessária)
 - Reaproveita um padrão já validado em produção no próprio stack (`Minion::Backend::Pg`
@@ -179,7 +209,7 @@ Referências: [PostgreSQL](../references/postgresql.md), [PgQue](../references/p
   conceitualmente diferente de exchanges/routing keys do RabbitMQ — não é um
   substituto 1:1, é um modelo diferente que cobre o mesmo caso de uso
 
-**Ações necessárias** *(somente quando esta ADR for aceita — nenhuma executada agora)*:
+**Ações necessárias** *(executadas na aceitação desta ADR, 2026-07-07)*:
 - **Pré-requisito**: a baseline de
   testes contra o mecanismo atual (`t/070_notifications.t`, cobrindo os 3 jobs
   Minion sem teste antes e o roteamento do `NotificationWorker`) já existe no

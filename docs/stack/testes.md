@@ -42,7 +42,7 @@ t/
 │   ├── products.t
 │   └── auth.t                ← rotas protegidas com JWT
 └── integration/
-    └── worker.t              ← NotificationWorker com RabbitMQ mockado
+    └── worker.t              ← NotificationWorker contra PgQue real (db-events)
 ```
 
 ---
@@ -298,7 +298,7 @@ jobs:
 | `subtest 'descrição' => sub { ... }` | Agrupa testes relacionados com saída TAP hierárquica |
 | Um arquivo `.t` por rota ou modelo | Facilita rodar um subconjunto; falhas isoladas não travam tudo |
 | Mock de JWT em todos os testes de API | Testes de API não dependem do Keycloak — rodam offline |
-| `Test::MockObject` para deps externas | RabbitMQ e e-mail não são chamados em testes de unidade |
+| `Test::MockObject` para deps externas | E-mail e outras chamadas HTTP externas não são acionados em testes de unidade — PgQue/Postgres usam instância real, não mock (ver ADR-011) |
 
 ---
 

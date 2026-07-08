@@ -57,7 +57,7 @@ O GitHub recomenda até 20 tópicos; todos em minúsculo, palavras separadas por
 | `documentation` | Tipo de projeto |
 
 **A adicionar conforme ADRs de stack forem definidas** (framework web, banco de dados,
-message broker, etc.): tópicos como `mojolicious`, `postgresql`, `rabbitmq` devem ser
+filas, etc.): tópicos como `mojolicious`, `postgresql`, `pgque` devem ser
 incluídos somente após as respectivas ADRs serem aceitas.
 
 ## Justificativa

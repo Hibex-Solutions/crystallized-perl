@@ -63,6 +63,46 @@ camada sem benefício real e com um risco concreto:
 tem um único arquivo `.pl`, sempre invocado com `carton exec perl eng/<script>.pl` —
 comando idêntico em Linux, macOS e Windows.
 
+### Revisão 2026-07-07 — `script/` passa a abrigar processos de execução da aplicação
+
+A versão original desta ADR rejeitava colocar qualquer coisa em `script/` além do
+entry point Mojolicious, com o argumento de que misturaria "scripts de aplicação"
+com "scripts de engenharia" (ver "Alternativas Consideradas" abaixo). A implementação
+da ADR-022 (PgQue) expôs uma terceira categoria que essa dicotomia original não
+previa: **processos de execução da aplicação em produção que não são o servidor
+HTTP** — hoje o `NotificationWorker` (consumidor de eventos) e, com a ADR-022, o
+novo processo de ticker do PgQue. Nenhum dos dois é uma ferramenta de apoio ao
+desenvolvedor (não migra schema, não popula dados, não verifica ambiente) — são
+processos de longa duração que rodam em produção ao lado do servidor Hypnotoad e do
+worker do Minion (este último já invocado via `script/stega minion worker`, não via
+`eng/`).
+
+**Decisão revisada**: a fronteira entre os dois diretórios passa a ser por **tipo de
+processo**, não apenas "é o entry point ou não é":
+
+| Diretório | Contém | Exemplos |
+|-----------|--------|----------|
+| `script/` | Processos de execução da aplicação (roda em produção, ao lado da API) | `script/stega` (servidor HTTP), `script/worker` (consumidor de eventos PgQue), `script/pgque_ticker` (tick de rotação do PgQue) |
+| `eng/` | Ferramentas de apoio ao desenvolvimento/implantação (rodadas manualmente ou uma vez por deploy, nunca de longa duração) | `eng/migrate.pl`, `eng/seed.pl`, `eng/setup.pl`, `eng/keycloak_test_users.pl`, `eng/bootstrap_pgque.pl` |
+
+Nomenclatura: arquivos em `script/` **não levam extensão `.pl`**, seguindo o padrão
+já existente de `script/stega` (shebang `#!/usr/bin/env perl` cobre a execução
+direta) — a ausência de `.pl` sinaliza visualmente "processo de aplicação", em
+contraste com os `.pl` de `eng/`. Isso não reabre a alternativa rejeitada
+originalmente ("Scripts em `script/`" na tabela abaixo): aquela rejeição era sobre
+misturar `script/` com scripts de **apoio ao desenvolvimento** (migração, seed) —
+continua válida. O que muda é que `script/` deixa de significar "só o entry point
+Mojolicious" e passa a significar "todo processo de execução da aplicação",
+consistente com a própria convenção Mojolicious de nomear pontos de entrada
+executáveis nesse diretório (o plugin Minion já adiciona `minion worker` como
+subcomando de `script/stega`, em vez de um script `eng/` à parte — o mesmo
+raciocínio agora se aplica ao `NotificationWorker` e ao ticker, que não se prestam a
+virar subcomando porque rodam como processo dedicado e de longa duração, não uma
+tarefa pontual do Mojolicious).
+
+**Ação necessária desta revisão**: mover `eng/worker.pl` para `script/worker`
+(sem mudança de lógica interna) e criar o novo `script/pgque_ticker` — ver ADR-022.
+
 ## Justificativa
 
 ### Perl como linguagem de scripts de engenharia
@@ -230,7 +270,8 @@ exit($ok ? 0 : 1);
 O diretório `eng/` não conflita com nenhuma convenção da comunidade Perl:
 
 - `lib/` — módulos da aplicação (convenção padrão CPAN/Perl)
-- `script/` — ponto de entrada Mojolicious (convenção Mojolicious)
+- `script/` — processos de execução da aplicação: entry point Mojolicious e demais
+  processos de longa duração que rodam em produção (ver "Revisão 2026-07-07" acima)
 - `t/` — testes (convenção padrão Perl)
 - `bin/` — executáveis instaláveis (convenção CPAN, para módulos distribuídos)
 - `eng/` — scripts de engenharia do projeto (sem conflito, análogo ao `script/` de outros ecossistemas)
@@ -250,7 +291,7 @@ Referências: [Perlbrew](../references/perlbrew.md),
 | **Bash + PowerShell paralelos** | Duplica a lógica; Bash não roda nativamente no Windows sem WSL; PowerShell não roda nativamente no Linux sem instalação adicional |
 | **Makefile** | Requer `make` instalado (ausente por padrão no Windows); sintaxe não familiar para equipes Perl-first; não aproveita o ecossistema da stack |
 | **npm scripts (package.json)** | Introduz Node.js como dependência de ferramentas sem nenhum benefício; inconsistente com a stack Perl |
-| **Scripts em `script/`** | Misturaria scripts de aplicação (Mojolicious) com scripts de engenharia; convenção Mojolicious espera apenas o ponto de entrada da app em `script/` |
+| **Scripts de apoio ao desenvolvimento em `script/`** | Misturaria processos de execução da aplicação com ferramentas de apoio ao desenvolvimento (migração, seed, verificação de ambiente) — distinção que continua valendo após a "Revisão 2026-07-07": o que mudou foi reconhecer que processos de execução *não-HTTP* (worker, ticker) também pertencem a `script/`, não que `script/` virou um repositório geral de scripts |
 | **Docker exec como wrapper** | Requer Docker em execução para tarefas que poderiam ser locais; dificulta uso em ambientes de CI sem Docker-in-Docker |
 | **Wrapper `.ps1` por script (decisão original desta ADR)** | Nunca foi o caminho documentado como principal; o wrapper implementado na Stega divergiu do comando real (`carton exec perl eng/script.pl`) por omitir `carton exec`, mascarando o uso de dependências fora de `local/`; dobra o número de arquivos em `eng/` sem ganho de portabilidade, já que `perl eng\script.pl` já funciona nativamente em qualquer shell do Windows — ver "Revisão 2026-07-01" |
 

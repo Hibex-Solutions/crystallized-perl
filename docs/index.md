@@ -37,7 +37,7 @@ Siga a trilha de guias — cada um pressupõe o anterior:
 
 | Guia | O que cobre |
 |------|------------|
-| [Guia 1 — Ambiente de Desenvolvimento](/guides/ambiente-de-desenvolvimento) | Perl 5.42, Carton, Docker Compose com PostgreSQL/RabbitMQ/Keycloak |
+| [Guia 1 — Ambiente de Desenvolvimento](/guides/ambiente-de-desenvolvimento) | Perl 5.42, Carton, Docker Compose com PostgreSQL (4 instâncias)/Keycloak |
 | [Guia 2 — Estrutura Mínima de Projeto](/guides/estrutura-minima-de-projeto) | cpanfile, .gitattributes, DEVELOPMENT.md — esqueleto da Stega |
 | [Guia 3 — Primeira Rota com Mojolicious](/guides/primeira-rota-mojolicious) | Stega.pm, controller, GET /healthz, Test::Mojo |
 
@@ -47,7 +47,7 @@ A seção [Stack](/stack) tem uma página por tecnologia com comandos essenciais
 e padrões de uso no contexto da Stega:
 [Mojolicious](/stack/mojolicious) · [Carton](/stack/carton) · [Moo](/stack/moo) ·
 [PostgreSQL](/stack/postgresql) · [Mojo::Pg](/stack/mojo-pg) ·
-[RabbitMQ](/stack/rabbitmq) · [Keycloak](/stack/keycloak) · [Docker](/stack/docker) ·
+[PgQue](/stack/pgque) · [Keycloak](/stack/keycloak) · [Docker](/stack/docker) ·
 [Kubernetes](/stack/kubernetes) · [OpenAPI](/stack/openapi) · [Testes](/stack/testes)
 
 ### Entenda as decisões

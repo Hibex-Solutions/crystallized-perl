@@ -90,7 +90,7 @@ const STACK = [
   ['Banco de dados', 'PostgreSQL 17 + JSONB'],
   ['Acesso a dados', 'Mojo::Pg + Migrations'],
   ['Autenticação', 'Keycloak + JWT (Crypt::JWT)'],
-  ['Message broker', 'RabbitMQ (AMQP 0-9-1)'],
+  ['Filas', 'PgQue + Minion (PostgreSQL)'],
   ['Contrato de API', 'OpenAPI v3 (documentação)'],
   ['Testes', 'Test::Mojo + prove + Devel::Cover'],
   ['Containerização', 'Docker multi-stage build'],

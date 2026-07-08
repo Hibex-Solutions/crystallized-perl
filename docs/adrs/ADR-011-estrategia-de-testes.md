@@ -7,7 +7,7 @@
 
 O stack precisa de uma estratégia de testes que cubra: testes unitários de lógica de
 domínio, testes de integração de API HTTP, mocking de dependências externas (Keycloak,
-RabbitMQ) e métricas de cobertura de código. A estratégia deve ser integrável ao
+serviços HTTP externos) e métricas de cobertura de código. A estratégia deve ser integrável ao
 pipeline de CI (GitHub Actions) e ao processo de build Docker — falhas de teste devem
 impedir a geração da imagem de produção.
 
@@ -64,7 +64,7 @@ t/
 │   ├── users.t             ← CRUD de usuários
 │   └── auth.t              ← rotas protegidas com JWT
 └── integration/
-    └── worker.t            ← worker + RabbitMQ (mock)
+    └── worker.t            ← worker + PgQue real (db-events)
 ```
 
 ### Teste de unidade (modelo Moo)
@@ -251,23 +251,23 @@ use Test::MockObject;
 
 use MyApp::Service::OrderProcessor;
 
-subtest 'processar pedido chama pg e publica no rabbitmq' => sub {
+subtest 'processar pedido chama pg e notifica o serviço externo' => sub {
     my $mock_db = Test::MockObject->new;
     $mock_db->mock('query', sub { bless { id => 99 }, 'MockResult' });
 
-    my $mock_mq = Test::MockObject->new;
-    my $published;
-    $mock_mq->mock('publish', sub { $published = $_[1] });
+    my $mock_notifier = Test::MockObject->new;
+    my $notified;
+    $mock_notifier->mock('notify', sub { $notified = $_[1] });
 
     my $processor = MyApp::Service::OrderProcessor->new(
-        db => $mock_db,
-        mq => $mock_mq,
+        db       => $mock_db,
+        notifier => $mock_notifier,
     );
 
     $processor->process({ order_id => 1, user_id => 42 });
 
-    ok defined $published, 'publicou mensagem no broker';
-    is $published->{order_id}, 1, 'order_id correto na mensagem';
+    ok defined $notified, 'notificou o serviço externo';
+    is $notified->{order_id}, 1, 'order_id correto na notificação';
 };
 
 done_testing;

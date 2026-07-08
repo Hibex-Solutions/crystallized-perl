@@ -1,7 +1,14 @@
 # ADR-008: Message Broker — RabbitMQ
 
-**Status**: Aceita  
+**Status**: Substituída por [ADR-022](ADR-022-filas-em-postgresql.md)
 **Data**: 2026-06-27
+
+> **Revogada em 2026-07-07**: o papel de log de eventos multi-consumidor descrito
+> nesta ADR passou para o PgQue, em PostgreSQL — ver [ADR-022](ADR-022-filas-em-postgresql.md).
+> RabbitMQ, `Net::AMQP::RabbitMQ` e a exceção "Windows precisa de Docker" (ADR-014,
+> Guia 8) não fazem mais parte do stack. Este arquivo é mantido para histórico — a
+> decisão e o código de exemplo abaixo refletem o que estava em vigor entre
+> 2026-06-27 e 2026-07-07, não o estado atual do stack.
 
 ## Contexto
 

@@ -3,24 +3,21 @@
 **Status**: Aceita
 **Data**: 2026-07-03
 
-> **Nota 2026-07-04**: as variáveis `POSTGRESQL_APP_URL`/`POSTGRESQL_APP_USERNAME`/
-> `POSTGRESQL_APP_PASSWORD`/`POSTGRESQL_APP_MIGRATION_USERNAME`/
-> `POSTGRESQL_APP_MIGRATION_PASSWORD` abaixo já refletem a Revisão 2026-07-04 da
-> [ADR-016](ADR-016-acesso-a-dados-relacional-mojo-pg.md) (formato explícito, sem
-> credenciais embutidas na URL) — essa parte está **em vigor**. O restante da lista
-> pode mudar se duas ADRs `Proposta` forem aceitas: a
-> [ADR-022](ADR-022-filas-em-postgresql.md) remove a chave `rabbitmq`; a
-> [ADR-023](ADR-023-topologia-de-instancias-postgresql.md) acrescenta
-> `POSTGRESQL_JOBS_URL`/`_USERNAME`/`_PASSWORD` e, condicionalmente,
-> `POSTGRESQL_EVENTS_URL`/`_USERNAME`/`_PASSWORD`.
+> **Nota 2026-07-07**: com a aceitação da [ADR-022](ADR-022-filas-em-postgresql.md)
+> e da [ADR-023](ADR-023-topologia-de-instancias-postgresql.md), a chave
+> `rabbitmq` foi removida do hashref e a chave `postgresql` passou a ter três
+> sub-hashes (`app`, `jobs`, `events`), cada um com `url`/`username`/`password`
+> (`app` também com `migration_username`/`migration_password`) — ver "Contexto"
+> e "Decisão" abaixo, já atualizados para o estado atual.
 
 ## Contexto
 
 A Stega lê dezenas de variáveis de ambiente (`KEYCLOAK_URL`, `KEYCLOAK_FRONTEND_URL`,
-`KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `RABBITMQ_HOST`,
-`RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST`, `RABBITMQ_PORT`,
+`KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`,
 `POSTGRESQL_APP_URL`, `POSTGRESQL_APP_USERNAME`, `POSTGRESQL_APP_PASSWORD`,
 `POSTGRESQL_APP_MIGRATION_USERNAME`, `POSTGRESQL_APP_MIGRATION_PASSWORD`,
+`POSTGRESQL_JOBS_URL`, `POSTGRESQL_JOBS_USERNAME`, `POSTGRESQL_JOBS_PASSWORD`,
+`POSTGRESQL_EVENTS_URL`, `POSTGRESQL_EVENTS_USERNAME`, `POSTGRESQL_EVENTS_PASSWORD`,
 `STEGA_SECRET`, `TEST_JWT_SECRET`,
 `GITHUB_WEBHOOK_SECRET`) espalhadas por `$ENV{...}` direto em Controllers, Jobs,
 Workers e scripts de engenharia. Antes desta ADR:
@@ -28,10 +25,9 @@ Workers e scripts de engenharia. Antes desta ADR:
 - `Stega::Controller::Auth` lia `KEYCLOAK_*` de forma independente em quatro métodos
   (`login`, `callback`, `logout`, `change_password`), cada um reescrevendo a mesma
   cadeia de fallback
-- `Stega::Job::SendWelcomeNotification` e `Stega::Worker::NotificationWorker` tinham
-  literalmente os mesmos cinco `$ENV{RABBITMQ_*}` copiados
 - `lib/Stega.pm`, `eng/migrate.pl` e `eng/seed.pl` cada um lia `POSTGRESQL_URL`/
-  `POSTGRESQL_MIGRATION_URL` de forma independente
+  `POSTGRESQL_MIGRATION_URL` de forma independente (formato antigo, anterior à
+  Revisão 2026-07-04 da ADR-016 e à ADR-023)
 
 Isso cria risco real de divergência silenciosa: um nome digitado de forma
 ligeiramente diferente (`KEYCLOAK_CLIENTE_ID` em vez de `KEYCLOAK_CLIENT_ID`, por
@@ -42,10 +38,10 @@ quais variáveis de ambiente a aplicação de fato usa.
 ## Decisão
 
 Um módulo `Stega::Config` com uma única função, `load()`, que lê todo `%ENV` da
-aplicação **uma vez** e devolve um hashref estruturado por área (`postgresql`,
-`rabbitmq`, `keycloak`, e chaves de nível superior para segredos avulsos). É o
-único arquivo do código-fonte que contém a string literal de cada nome de
-variável de ambiente.
+aplicação **uma vez** e devolve um hashref estruturado por área (`postgresql`
+— com três sub-hashes `app`/`jobs`/`events`, ver ADR-023 —, `keycloak`, e chaves
+de nível superior para segredos avulsos). É o único arquivo do código-fonte que
+contém a string literal de cada nome de variável de ambiente.
 
 Dois consumidores, dois padrões de uso:
 - **A aplicação Mojolicious** (`lib/Stega.pm`) chama `Stega::Config::load()` uma
@@ -53,7 +49,8 @@ Dois consumidores, dois padrões de uso:
   todo objeto `Mojolicious`, sem plugin necessário) — Controllers e helpers lêem
   `$c->app->config->{...}` daí em diante
 - **Processos sem instância de app** (`eng/migrate.pl`, `eng/seed.pl`,
-  `Stega::Worker::NotificationWorker`, executado via `eng/worker.pl`) chamam
+  `eng/bootstrap_pgque.pl`, `eng/setup.pl`, `Stega::Worker::NotificationWorker`
+  via `script/worker`, e `script/pgque_ticker`, ver ADR-013 revisada) chamam
   `Stega::Config::load()` diretamente
 
 Onde o comportamento diverge entre consumidores de uma mesma variável — por
@@ -85,9 +82,10 @@ de leitura, não uma camada de armazenamento — não introduz um arquivo `.conf
 valores de produção, apenas nomeia e organiza o que já vinha de `%ENV`.
 
 Um módulo próprio (em vez de depender só de `$app->config` do Mojolicious) foi
-necessário porque parte dos consumidores (`eng/*.pl`, `NotificationWorker`) não têm
-instância de aplicação Mojolicious — são processos standalone. `Stega::Config::load()`
-funciona igualmente nos dois contextos, sem depender do ciclo de vida do Mojolicious.
+necessário porque parte dos consumidores (`eng/*.pl`, `NotificationWorker`,
+`pgque_ticker`) não têm instância de aplicação Mojolicious — são processos
+standalone. `Stega::Config::load()` funciona igualmente nos dois contextos, sem
+depender do ciclo de vida do Mojolicious.
 
 ## Alternativas Consideradas
 
@@ -122,11 +120,12 @@ funciona igualmente nos dois contextos, sem depender do ciclo de vida do Mojolic
 - Atualizar `Stega::Controller::Auth` (`login`, `callback`, `logout`,
   `change_password`) e `Stega::Controller::Webhook` (`_verify_github_signature`)
   para usar `$c->app->config`
-- Atualizar `Stega::Job::SendWelcomeNotification` (recebe `$app`, já disponível
-  via `$job->app`) e `Stega::Worker::NotificationWorker` (chama
+- Atualizar `Stega::Notification` (recebe `$app`, já disponível via `$job->app`
+  nos Jobs Minion) e `Stega::Worker::NotificationWorker` (chama
   `Stega::Config::load()` diretamente, sem instância de app)
 - Atualizar `eng/migrate.pl` e `eng/seed.pl` para usar `Stega::Config::load()`
-- Validado via suíte completa (75 testes, `Result: PASS`) e via `curl` contra a
+- Validado via suíte completa (`Result: PASS`) e via `curl` contra a
   aplicação real em Docker: `/healthz`, redirect de sessão para `/login`, URL de
   redirect do Keycloak montada corretamente a partir de `keycloak.frontend_url`,
-  e `NotificationWorker` conectando ao RabbitMQ via `Stega::Config` sem erro
+  e `NotificationWorker` conectando a `db-events` via `Stega::Config` sem erro
+  (ver ADR-022/ADR-023)

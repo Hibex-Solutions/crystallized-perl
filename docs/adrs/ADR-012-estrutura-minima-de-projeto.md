@@ -207,7 +207,7 @@ mínima obrigatória:
 
 Este projeto usa Perl 5.42+ gerenciado localmente (sem depender do Perl do sistema
 operacional). As dependências são gerenciadas pelo Carton. Os serviços de apoio
-(PostgreSQL, RabbitMQ) rodam via Docker Compose.
+(PostgreSQL) rodam via Docker Compose.
 
 ## 2. Instalando o Perl local
 
@@ -262,10 +262,11 @@ POSTGRESQL_APP_PASSWORD=dev_password
 POSTGRESQL_APP_MIGRATION_USERNAME=myapp_migrate
 POSTGRESQL_APP_MIGRATION_PASSWORD=dev_password
 
-# RabbitMQ
-RABBITMQ_HOST=localhost
-RABBITMQ_USER=myapp
-RABBITMQ_PASSWORD=dev_password
+# Fila de eventos multi-consumidor via PgQue (só se o projeto adotar a ADR-022) —
+# instância própria, nunca a mesma URL/credencial de POSTGRESQL_APP_*
+# POSTGRESQL_EVENTS_URL=postgresql://localhost:5432/db-events
+# POSTGRESQL_EVENTS_USERNAME=myapp_events
+# POSTGRESQL_EVENTS_PASSWORD=dev_password
 
 # Keycloak (para desenvolvimento local com Keycloak via Docker Compose)
 KEYCLOAK_URL=http://localhost:8080
@@ -280,7 +281,7 @@ Documente todas as variáveis em `.env.example` com valores de exemplo.
 ## 5. Iniciando os serviços
 
 ```bash
-docker compose up -d postgres rabbitmq   # só os serviços de apoio
+docker compose up -d postgres             # só os serviços de apoio
 carton exec perl script/my_app.pl daemon # aplicação em modo de desenvolvimento
 ```
 

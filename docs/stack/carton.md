@@ -66,7 +66,6 @@ requires 'Mojo::Pg',             '4.0';
 requires 'Moo',                  '2.0';
 requires 'namespace::autoclean', '0.29';
 requires 'Crypt::JWT',           '0.034';
-requires 'Net::AMQP::RabbitMQ', '2.40000';
 requires 'Digest::HMAC',         '1.04';
 requires 'JSON::PP',             '4.0';
 requires 'Minion';

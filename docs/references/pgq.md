@@ -28,4 +28,5 @@ seção 5.
 ## Referenciada em
 
 - [ADR-022](../adrs/ADR-022-filas-em-postgresql.md) — avaliado e rejeitado como
-  alternativa ao PgQue (extensão C + daemon externo, sem desenvolvimento ativo desde 2023)
+  alternativa ao PgQue (extensão C + daemon externo, sem desenvolvimento ativo
+  desde 2023); ADR aceita em 2026-07-07 com PgQue como mecanismo escolhido

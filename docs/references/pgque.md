@@ -19,9 +19,9 @@ para o "tick" automático de rotação, `pg_cron` (ou um agendador externo chama
 `pgque.maint_rotate_tables_step2()`, que não está embutida em `pgque.maint()`;
 `pgque.ticker_loop()` é de uso interno do `pg_cron`, ver ADR-022).
 
-Candidato central na [ADR-022](../adrs/ADR-022-filas-em-postgresql.md) (proposta,
-ainda não aceita) para substituir o RabbitMQ ([ADR-008](../adrs/ADR-008-message-broker-rabbitmq.md))
-no papel de log de eventos multi-consumidor (fan-out) do stack — eliminando a
+Mecanismo adotado na [ADR-022](../adrs/ADR-022-filas-em-postgresql.md) (aceita em
+2026-07-07) para substituir o RabbitMQ ([ADR-008](../adrs/ADR-008-message-broker-rabbitmq.md),
+histórico) no papel de log de eventos multi-consumidor (fan-out) do stack — eliminando a
 dependência de um cliente AMQP em Perl, cujo módulo principal (`Net::AMQP::RabbitMQ`)
 não compila em Windows. Por ser SQL puro, PgQue é acessado inteiramente via
 `Mojo::Pg` ([ADR-016](../adrs/ADR-016-acesso-a-dados-relacional-mojo-pg.md)), sem
@@ -35,5 +35,7 @@ armadilhas está em
 
 ## Referenciada em
 
-- [ADR-022](../adrs/ADR-022-filas-em-postgresql.md) — proposta (não aceita) de
-  substituir o RabbitMQ por PgQue como mecanismo de filas em PostgreSQL
+- [ADR-022](../adrs/ADR-022-filas-em-postgresql.md) — decisão de substituir o
+  RabbitMQ pelo PgQue como mecanismo de filas em PostgreSQL (aceita em 2026-07-07)
+- [ADR-018](../adrs/ADR-018-aplicacao-de-demonstracao.md) — a Stega usa o PgQue
+  como fila de eventos multi-consumidor (`NotificationWorker`)

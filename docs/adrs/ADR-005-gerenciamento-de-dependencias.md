@@ -60,11 +60,11 @@ requires 'Mojo::Pg',             '4.0';
 requires 'Moo',                  '2.0';
 requires 'namespace::autoclean', '0.29';  # remove importações do namespace público (ADR-006)
 requires 'Crypt::JWT',           '0.034'; # validação JWT (ADR-009)
-requires 'Net::AMQP::RabbitMQ', '2.40000'; # AMQP para jobs e worker (ADR-008)
 requires 'Digest::HMAC',         '1.04';  # verificação de webhooks
 requires 'JSON::PP',             '4.0';
 requires 'Minion';                        # fila interna de jobs (ADR-018)
 requires 'Minion::Backend::Pg';
+# PgQue (ADR-022) não adiciona linha própria — é SQL puro, consumido via Mojo::Pg
 
 # Dependências de desenvolvimento e teste (não vão na imagem de produção)
 on 'test' => sub {

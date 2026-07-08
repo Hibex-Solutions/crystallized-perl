@@ -133,25 +133,22 @@ services:
       - POSTGRESQL_APP_PASSWORD=dev_password
       - POSTGRESQL_APP_MIGRATION_USERNAME=myapp
       - POSTGRESQL_APP_MIGRATION_PASSWORD=dev_password
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASSWORD=guest
     ports:
       - "3000:3000"
     command: carton exec perl script/my_app.pl daemon --listen http://*:3000
 
-  postgres:
+  postgres-app:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB:       stega
+      POSTGRES_DB:       myapp
       POSTGRES_USER:     postgres
       POSTGRES_PASSWORD: postgres_dev
-
-  rabbitmq:
-    image: rabbitmq:4.3-management
-    ports:
-      - "15672:15672"    # Management UI para desenvolvimento
 ```
+
+Filas (jobs internos via Minion e eventos multi-consumidor via PgQue, ver
+ADR-022/ADR-023) usam instâncias PostgreSQL próprias (`db-jobs`/`db-events`) —
+omitidas deste fragmento por brevidade; ver o `compose.yml` completo da Stega
+(ADR-018) para o exemplo com as quatro instâncias.
 
 ```bash
 # Iniciar o ambiente completo
@@ -193,12 +190,29 @@ E adicionar ao repositório um `.gitattributes`:
 **Positivo**:
 - Desenvolvedores têm a versão exata de Perl declarada no stack
 - Ambiente isolado não afeta o Perl do sistema
-- Docker Compose provê todos os serviços de apoio (PostgreSQL, RabbitMQ) localmente
+- Docker Compose provê todos os serviços de apoio (as instâncias PostgreSQL,
+  Keycloak) localmente
 
 **Negativo**:
 - Setup inicial tem algumas etapas (perlbrew/berrybrew requerem configuração do shell)
 - No Windows sem Docker, módulos XS exigem que o Strawberry Perl esteja corretamente
   configurado com o compilador C do MinGW
+- **Revisão 2026-07-08**: independente de módulos XS, o worker do Minion
+  (`carton exec perl script/stega minion worker`, ADR-008) não roda em Windows
+  nativo sob nenhuma circunstância — `Minion.pm::worker()` recusa operar
+  (`croak 'Minion workers do not support fork emulation'`) em qualquer Perl com
+  `$Config{d_pseudofork}` verdadeiro (Strawberry/berrybrew usam fork emulado via
+  ithreads, sem `fork()` real do SO). Confirmado ao validar a migração da
+  ADR-022 em ambiente nativo — não é causado por ela, é uma restrição do
+  próprio Minion, presente desde a adoção original na ADR-008. Único processo
+  da Stega com essa exceção: os demais (`script/stega daemon`, `script/worker`,
+  `script/pgque_ticker`, scripts de `eng/`) rodam nativamente sem ressalva.
+  Requer Caminho C (Docker Compose) ou WSL2 especificamente para esse processo;
+  testes que dependem dele (`t/030_webhooks.t`, `t/070_notifications.t`) se
+  autodescartam nesse ambiente com `plan skip_all => ... if
+  $Config{d_pseudofork}`. Resolver isso de vez (não só contornar) é pendência
+  registrada na [ADR-024](ADR-024-jobs-assincronos-multiplataforma.md)
+  (`Proposta`, sem decisão ainda)
 
 **Ações necessárias**:
 - Criar guia de configuração do ambiente local (Guia 1 da trilha de documentação)

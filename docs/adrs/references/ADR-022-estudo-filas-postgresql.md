@@ -33,8 +33,11 @@ não foi confirmado por acesso direto.
 
 A [ADR-008](../ADR-008-message-broker-rabbitmq.md) define RabbitMQ como message
 broker, acessado via `Net::AMQP::RabbitMQ`. Na prática de desenvolvimento local,
-isso já exige uma exceção documentada — o [Guia 8](../../guides/08-rabbitmq-e-minion.md)
-traz esta nota:
+isso já exige uma exceção documentada — o então "Guia 8 — RabbitMQ e Minion"
+(`08-rabbitmq-e-minion.md`, depois reescrito e renomeado para
+[`08-filas-com-pgque-e-minion.md`](../../guides/08-filas-com-pgque-e-minion.md)
+na implementação desta ADR — a nota de compilação Windows abaixo não existe mais
+lá, ver seção 9) trazia esta nota:
 
 > "`Net::AMQP::RabbitMQ` embute um cliente C (`rabbitmq-c`) que assume `poll()`
 > disponível — ausente no MinGW/Winsock (só existe `WSAPoll()`, nome e assinatura

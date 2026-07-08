@@ -17,6 +17,9 @@ cloud-native.
 
 ## Referenciada em
 - ADR-016: Acesso a Dados Relacional — Mojo::Pg e Migrations
-- [ADR-022](../adrs/ADR-022-filas-em-postgresql.md): proposta (não aceita) de
-  filas em PostgreSQL — todo acesso ao PgQue seria feito via `Mojo::Pg`, sem
-  dependência XS nova
+- [ADR-022](../adrs/ADR-022-filas-em-postgresql.md): filas em PostgreSQL (aceita
+  em 2026-07-07) — todo acesso ao PgQue é feito via `Mojo::Pg`, sem dependência
+  XS nova
+- [ADR-023](../adrs/ADR-023-topologia-de-instancias-postgresql.md): três
+  instâncias `Mojo::Pg` independentes no mesmo processo Stega (`$app->pg`,
+  backend do Minion, `$app->pg_events`)

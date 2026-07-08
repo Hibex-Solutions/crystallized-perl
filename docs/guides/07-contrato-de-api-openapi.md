@@ -280,8 +280,8 @@ exatamente o que a API aceita, porque é a mesma fonte que o plugin usa para val
 
 Com o contrato de API formalizado, o próximo guia cobre processamento assíncrono:
 
-- **Guia 8 — RabbitMQ e Minion**: jobs internos com Minion, notificações via
-  RabbitMQ, e a limitação conhecida do `Net::AMQP::RabbitMQ` no Windows
+- **Guia 8 — Filas com PgQue e Minion**: jobs internos com Minion, notificações
+  multi-consumidor via PgQue, direto em PostgreSQL, sem dependência XS
 
 Explore agora:
 - [**ADR-015**](/adrs/ADR-015-contrato-de-api-openapi-v3): a decisão completa e por

@@ -170,10 +170,12 @@ Rode (mesmo comando em qualquer sistema operacional — ver ADR-013):
 
 ```bash
 carton exec perl eng/migrate.pl
+# Windows/PowerShell: carton exec perl eng/migrate.pl | Out-Host
 ```
 
-No Windows, encadeie `| Out-Host` — ver a nota sobre `carton exec` no `TESTING.md`
-da Stega se a saída parecer atrasada ou fora de ordem.
+No Windows, encadeie `| Out-Host` — ver a nota sobre `carton exec` no `DEVELOPMENT.md`
+da Stega (seção 1) se a saída parecer atrasada ou fora de ordem. `TESTING.md` não se
+aplica aqui: aquele guia roda tudo via Docker, sem `carton exec` local nenhum.
 
 O histórico de versões aplicadas fica na própria base, em uma tabela `mojo_migrations`
 criada automaticamente pelo Mojo::Pg. Rodar `eng/migrate.pl` de novo, sem migrations
@@ -349,7 +351,7 @@ uma nova versão com a correção em vez de editar a existente.
 | `from_dir` não encontra nenhuma migration | Nome do diretório não é puramente numérico | Renomeie `migrations/01_users/` para `migrations/1/` |
 | `Connection refused` | PostgreSQL ainda subindo | Aguarde `docker compose ps` mostrar `(healthy)` |
 | Migration aplicada, mas versão não muda | `up.sql` vazio ou só com comentários | Confirme que há pelo menos uma instrução SQL válida no arquivo |
-| Acentos corrompidos na saída de `eng/migrate.pl` no Windows | Console do PowerShell não está em UTF-8 | `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` — ver `TESTING.md` |
+| Acentos corrompidos na saída de `eng/migrate.pl` no Windows | Console do PowerShell não está em UTF-8 | `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; chcp 65001 \| Out-Null` — ver `DEVELOPMENT.md` (seção 1) |
 
 ---
 

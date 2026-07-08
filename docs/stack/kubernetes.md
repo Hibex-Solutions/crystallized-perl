@@ -5,16 +5,16 @@ title: Kubernetes
 
 # Kubernetes
 
-> **Decisão**: Kubernetes como orquestrador de produção; três Deployments para a
-> Stega; InitContainer para migrations; Hypnotoad com SIGUSR2 para atualizações
-> sem interrupção.
+> **Decisão**: Kubernetes como orquestrador de produção; quatro Deployments para a
+> Stega; InitContainers para migrations e bootstrap do PgQue; Hypnotoad com
+> SIGUSR2 para atualizações sem interrupção.
 > [ADR-010 — Orquestração Kubernetes](/adrs/ADR-010-orquestracao-kubernetes)
 
 ---
 
 ## Por que Kubernetes
 
-A Stega em produção consiste em três processos distintos que precisam de
+A Stega em produção consiste em quatro processos distintos que precisam de
 escalabilidade independente, reinicialização automática em caso de falha e
 atualizações sem interrupção. Kubernetes resolve isso declarativamente: os
 Deployments mantêm o estado desejado sem intervenção manual.
@@ -25,17 +25,21 @@ interrupção do Kubernetes, que termina Pods antigos somente após os novos est
 
 ---
 
-## Três Deployments da Stega
+## Quatro Deployments da Stega
 
 ```
 stega-api                  ← Hypnotoad (pre-fork) — web + API
-  └─ InitContainer: carton exec perl eng/migrate.pl
+  └─ InitContainer: carton exec perl eng/migrate.pl (db-app)
+  └─ InitContainer: carton exec perl eng/bootstrap_pgque.pl (db-events)
 
-stega-minion-worker        ← Minion worker (jobs internos)
+stega-minion-worker        ← Minion worker (jobs internos, db-jobs)
   └─ carton exec perl script/stega minion worker
 
-stega-notification-worker  ← RabbitMQ consumer (notificações)
-  └─ carton exec perl eng/worker.pl
+stega-notification-worker  ← consumidor PgQue (notificações, db-events)
+  └─ carton exec perl script/worker
+
+stega-pgque-ticker         ← tick de rotação do PgQue (db-events), replicas: 1
+  └─ carton exec perl script/pgque_ticker
 ```
 
 ---
@@ -84,6 +88,26 @@ spec:
                   name: stega-secrets
                   key: postgresql-app-migration-password
 
+        - name: bootstrap-pgque
+          image: registry.exemplo.com/stega:2026.06.0
+          command: ["carton", "exec", "perl", "eng/bootstrap_pgque.pl"]
+          env:
+            - name: POSTGRESQL_EVENTS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: stega-config
+                  key: postgresql-events-url
+            - name: POSTGRESQL_EVENTS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: stega-secrets
+                  key: postgresql-events-username
+            - name: POSTGRESQL_EVENTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: stega-secrets
+                  key: postgresql-events-password
+
       containers:
         - name: api
           image: registry.exemplo.com/stega:2026.06.0
@@ -106,11 +130,11 @@ spec:
                 secretKeyRef:
                   name: stega-secrets
                   key: postgresql-app-password
-            - name: RABBITMQ_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: stega-config
-                  key: rabbitmq-host
+            # Demais variáveis (POSTGRESQL_JOBS_*/EVENTS_*, KEYCLOAK_*) omitidas
+            # por brevidade — o container api também as recebe, porque
+            # Stega.pm::startup configura as três instâncias Mojo::Pg
+            # incondicionalmente (ADR-023). Ver Guia 9 para o exemplo completo
+            # usando envFrom em vez de env individual.
             - name: KEYCLOAK_URL
               valueFrom:
                 configMapKeyRef:
@@ -216,6 +240,13 @@ spec:
           image: registry.exemplo.com/stega:2026.06.0
           command: ["carton", "exec", "perl", "script/stega", "minion", "worker"]
           env:
+            # O BACKEND do Minion usa db-jobs, instância própria — nunca
+            # db-app para agendamento (ADR-023). Mas Stega.pm::startup
+            # configura as três instâncias Mojo::Pg incondicionalmente, e os
+            # Jobs em si (ex.: ProcessWebhookPayload) usam $app->pg (db-app)
+            # e $app->pg_events (db-events) para fazer seu trabalho — faltar
+            # qualquer uma das três faz Jobs específicos falharem em
+            # runtime, não no boot do worker.
             - name: POSTGRESQL_APP_URL
               valueFrom:
                 configMapKeyRef:
@@ -231,6 +262,36 @@ spec:
                 secretKeyRef:
                   name: stega-secrets
                   key: postgresql-app-password
+            - name: POSTGRESQL_JOBS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: stega-config
+                  key: postgresql-jobs-url
+            - name: POSTGRESQL_JOBS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: stega-secrets
+                  key: postgresql-jobs-username
+            - name: POSTGRESQL_JOBS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: stega-secrets
+                  key: postgresql-jobs-password
+            - name: POSTGRESQL_EVENTS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: stega-config
+                  key: postgresql-events-url
+            - name: POSTGRESQL_EVENTS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: stega-secrets
+                  key: postgresql-events-username
+            - name: POSTGRESQL_EVENTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: stega-secrets
+                  key: postgresql-events-password
           resources:
             requests:
               memory: "64Mi"
@@ -256,7 +317,10 @@ stringData:
   postgresql-app-password:           SENHA
   postgresql-app-migration-username: stega_migrate
   postgresql-app-migration-password: SENHA_MIGRATE
-  rabbitmq-password:        SENHA_RABBITMQ
+  postgresql-jobs-username:          stega_jobs
+  postgresql-jobs-password:          SENHA_JOBS
+  postgresql-events-username:        stega_events
+  postgresql-events-password:        SENHA_EVENTS
 ---
 # k8s/configmap.yaml
 apiVersion: v1
@@ -264,9 +328,11 @@ kind: ConfigMap
 metadata:
   name: stega-config
 data:
-  # Servidor/porta/banco — nunca credencial (Revisão 2026-07-04 da ADR-016)
-  postgresql-app-url: postgresql://postgres:5432/stega
-  rabbitmq-host: rabbitmq.stega.svc.cluster.local
+  # Servidor/porta/banco — nunca credencial (Revisão 2026-07-04 da ADR-016).
+  # Três instâncias PostgreSQL distintas (ADR-023) — cada uma seu próprio Service.
+  postgresql-app-url:    postgresql://postgres-app.stega.svc.cluster.local:5432/stega-app
+  postgresql-jobs-url:   postgresql://postgres-jobs.stega.svc.cluster.local:5432/stega-jobs
+  postgresql-events-url: postgresql://postgres-events.stega.svc.cluster.local:5432/stega-events
   keycloak-url:  https://keycloak.exemplo.com
   jwt-issuer:    https://keycloak.exemplo.com/realms/stega
 ```

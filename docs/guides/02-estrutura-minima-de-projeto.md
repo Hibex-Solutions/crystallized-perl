@@ -172,9 +172,6 @@ requires 'namespace::autoclean', '0.29';
 # Autenticação JWT (ADR-009)
 requires 'Crypt::JWT', '0.034';
 
-# RabbitMQ — publicação e consumo via AMQP 0-9-1 (ADR-008)
-requires 'Net::AMQP::RabbitMQ', '2.40000';
-
 # Assinatura HMAC para webhooks
 requires 'Digest::HMAC', '1.04';
 
@@ -184,6 +181,9 @@ requires 'JSON::PP', '4.0';
 # Fila local de jobs (ADR-018)
 requires 'Minion';
 requires 'Minion::Backend::Pg';
+
+# Filas de eventos multi-consumidor: PgQue (ADR-022) não precisa de dependência
+# própria — é SQL puro, consumido via Mojo::Pg (já declarado acima)
 
 # Dependências de teste — não incluídas na imagem de produção
 on 'test' => sub {
@@ -250,7 +250,7 @@ externa:
 
 A Stega usa Perl 5.42+ (gerenciado por perlbrew/berrybrew — não modifique o
 Perl do sistema). Dependências são gerenciadas pelo Carton. Serviços de apoio
-(PostgreSQL, RabbitMQ, Keycloak) rodam via Docker Compose.
+(quatro instâncias PostgreSQL, Keycloak) rodam via Docker Compose.
 
 ## Pré-requisitos
 
@@ -272,10 +272,11 @@ cp .env.example .env
 carton install
 
 # 4. Subir serviços de apoio
-docker compose up -d postgres rabbitmq keycloak
+docker compose up -d postgres-app postgres-jobs postgres-events postgres-keycloak keycloak
 
-# 5. Aplicar migrations
+# 5. Aplicar migrations e instalar o PgQue
 carton exec perl eng/migrate.pl
+carton exec perl eng/bootstrap_pgque.pl
 
 # 6. Popular dados de exemplo
 carton exec perl eng/seed.pl
@@ -295,14 +296,19 @@ de exemplo para desenvolvimento local.
 carton exec prove -lr t/
 ```
 
-## Scripts de engenharia (`eng/`)
+## Scripts de engenharia (`eng/`) e processos da aplicação (`script/`)
+
+`eng/` é apoio ao desenvolvimento/implantação; `script/` são processos que
+rodam em produção (ADR-013, revisão 2026-07-07):
 
 | Script | O que faz |
 |--------|-----------|
-| `perl eng/migrate.pl` | Aplica migrations pendentes |
+| `perl eng/migrate.pl` | Aplica migrations pendentes em `db-app` |
 | `perl eng/seed.pl` | Popula banco com dados de exemplo |
 | `perl eng/setup.pl` | Verifica dependências do ambiente |
-| `perl eng/worker.pl` | Inicia o NotificationWorker RabbitMQ |
+| `perl eng/bootstrap_pgque.pl` | Instala o PgQue em `db-events` (idempotente) |
+| `perl script/worker` | Inicia o NotificationWorker (consumidor PgQue) |
+| `perl script/pgque_ticker` | Tick de rotação do PgQue |
 ```
 
 ---
@@ -368,9 +374,9 @@ Resultado esperado:
 | `DEVELOPMENT.md` | Guia de configuração inicial para novos contribuidores | [ADR-012](/adrs/ADR-012-estrutura-minima-de-projeto) |
 | `lib/` | Código Perl da aplicação (namespaces `Stega::`) | [ADR-004](/adrs/ADR-004-framework-web-mojolicious) |
 | `migrations/` | Uma pasta por versão (`N/up.sql`, `N/down.sql`), via `from_dir` | [ADR-016](/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg) |
-| `script/` | Ponto de entrada Mojolicious | [ADR-004](/adrs/ADR-004-framework-web-mojolicious) |
+| `script/` | Processos de execução da aplicação: entry point Mojolicious e demais processos de longa duração (worker, ticker) | [ADR-004](/adrs/ADR-004-framework-web-mojolicious), [ADR-013](/adrs/ADR-013-scripts-de-engenharia) |
 | `t/` | Testes com prefixo numérico (`NNN_nome.t`); helpers de teste em `t/lib/` | [ADR-011](/adrs/ADR-011-estrategia-de-testes) |
-| `eng/` | Scripts de engenharia em Perl | [ADR-013](/adrs/ADR-013-scripts-de-engenharia) |
+| `eng/` | Ferramentas de apoio ao desenvolvimento/implantação, em Perl | [ADR-013](/adrs/ADR-013-scripts-de-engenharia) |
 | `api/` | Contrato OpenAPI v3 (`stega.yaml`) | [ADR-015](/adrs/ADR-015-contrato-de-api-openapi-v3) |
 
 ---

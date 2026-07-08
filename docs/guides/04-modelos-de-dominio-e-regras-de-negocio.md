@@ -325,7 +325,7 @@ entre chamadas dentro do mesmo teste (inserir, depois buscar) — simular isso c
 reimplementar uma Fake, só que sem a garantia de contrato que
 `with 'Stega::Repository::Product';` oferece. `Test::MockObject` continua sendo a
 ferramenta certa para o que já fazia bem: verificar uma interação pontual com um
-serviço externo (RabbitMQ, uma chamada HTTP), não para simular um repositório com
+serviço externo (PgQue, uma chamada HTTP), não para simular um repositório com
 estado.
 
 A Fake reside em `t/lib/`, não em `lib/` — é código que só existe para dar suporte a

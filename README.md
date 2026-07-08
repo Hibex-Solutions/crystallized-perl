@@ -56,7 +56,7 @@ Nenhuma decisão é justificada por "senso comum" — cada uma tem uma ADR.
 | [Mojolicious](docs/references/mojolicious.md) | Documentação Oficial | Framework web Perl moderno — escolhido em [ADR-004](docs/adrs/ADR-004-framework-web-mojolicious.md) |
 | [Kubernetes](docs/references/kubernetes.md) | Documentação Oficial | Orquestração de containers — escolhido em [ADR-010](docs/adrs/ADR-010-orquestracao-kubernetes.md) |
 
-Ver [`docs/references/`](docs/references/) para as 36 fontes completas.
+Ver [`docs/references/`](docs/references/) para as 38 fontes completas.
 
 ## Stack tecnológico
 
@@ -69,7 +69,9 @@ Ver [`docs/references/`](docs/references/) para as 36 fontes completas.
 | Banco de dados | PostgreSQL 17 | [ADR-007](docs/adrs/ADR-007-banco-de-dados-relacional-postgresql.md) |
 | Acesso relacional | Mojo::Pg + Mojo::Pg::Migrations | [ADR-016](docs/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg.md) |
 | Dados documentais | PostgreSQL JSONB | [ADR-017](docs/adrs/ADR-017-acesso-a-dados-documentos-jsonb.md) |
-| Message broker | RabbitMQ (AMQP 0-9-1) | [ADR-008](docs/adrs/ADR-008-message-broker-rabbitmq.md) |
+| Filas (jobs internos) | Minion + Minion::Backend::Pg | [ADR-008](docs/adrs/ADR-008-message-broker-rabbitmq.md) |
+| Filas (eventos multi-consumidor) | PgQue, em PostgreSQL | [ADR-022](docs/adrs/ADR-022-filas-em-postgresql.md) |
+| Topologia PostgreSQL | 4 instâncias por finalidade | [ADR-023](docs/adrs/ADR-023-topologia-de-instancias-postgresql.md) |
 | Autenticação | Keycloak + JWT / Crypt::JWT | [ADR-009](docs/adrs/ADR-009-autenticacao-keycloak-jwt.md) |
 | Contrato de API | OpenAPI v3 (documentação) | [ADR-015](docs/adrs/ADR-015-contrato-de-api-openapi-v3.md) |
 | Testes | Test::Mojo + prove + Devel::Cover | [ADR-011](docs/adrs/ADR-011-estrategia-de-testes.md) |
@@ -79,7 +81,7 @@ Ver [`docs/references/`](docs/references/) para as 36 fontes completas.
 | Site de docs | Docusaurus | — |
 
 Todas as decisões de stack estão documentadas em [`docs/adrs/`](docs/adrs/)
-(ADR-000 a ADR-018). A aplicação de demonstração que exercita todo o stack é
+(ADR-000 a ADR-023). A aplicação de demonstração que exercita todo o stack é
 a **Stega** — ver [ADR-018](docs/adrs/ADR-018-aplicacao-de-demonstracao.md).
 
 ## Documentação
@@ -93,9 +95,9 @@ Estrutura da documentação neste repositório:
 | Diretório | Conteúdo |
 |-----------|---------|
 | [`docs/adrs/`](docs/adrs/) | Architectural Decision Records — cada decisão significativa tem uma ADR |
-| [`docs/references/`](docs/references/) | 36 fontes externas anotadas que fundamentam as decisões |
-| `docs/guides/` | Tutoriais passo a passo (em desenvolvimento) |
-| `docs/stack/` | Referência por camada tecnológica (em desenvolvimento) |
+| [`docs/references/`](docs/references/) | 38 fontes externas anotadas que fundamentam as decisões |
+| `docs/guides/` | Trilha completa de 9 tutoriais passo a passo, usando a Stega como referência |
+| `docs/stack/` | Referência rápida por camada tecnológica |
 
 ## Como contribuir
 

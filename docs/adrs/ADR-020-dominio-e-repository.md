@@ -95,7 +95,7 @@ se a Fake não implementar todos os métodos `requires`, em vez de falhar tarde,
 runtime, dentro do código de domínio).
 
 As duas ferramentas continuam coexistindo no `cpanfile`: `Test::MockObject` para
-interações pontuais com serviços externos (RabbitMQ, chamadas HTTP), classes Fake
+interações pontuais com serviços externos (chamadas HTTP), classes Fake
 com `Moo::Role` para dependências com estado (Repository).
 
 Referências: [Moo](../references/moo.md),

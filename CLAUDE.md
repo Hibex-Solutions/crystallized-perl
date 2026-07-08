@@ -346,10 +346,11 @@ Todas as decisões de stack estão registradas nas ADRs. Consulte a seção
 | Framework web | Mojolicious + Hypnotoad (ADR-004) |
 | Dependências | Carton + cpanm (ADR-005) |
 | Orientação a objetos | Moo + Moo::Role (ADR-006) |
-| Banco de dados | PostgreSQL 17 (ADR-007) |
+| Banco de dados | PostgreSQL 17 (ADR-007), quatro instâncias por finalidade — `db-app`/`db-jobs`/`db-events`/Keycloak (ADR-023) |
 | Acesso relacional | Mojo::Pg + Mojo::Pg::Migrations (ADR-016) |
 | Dados documentais | PostgreSQL JSONB via Mojo::Pg (ADR-017) |
-| Message broker | RabbitMQ via AMQP 0-9-1 (ADR-008) |
+| Filas (jobs internos) | Minion + Minion::Backend::Pg, instância `db-jobs` (ADR-008 nota, ADR-023) |
+| Filas (eventos multi-consumidor) | PgQue em PostgreSQL, instância `db-events` (ADR-022, ADR-023) |
 | Autenticação | Keycloak + JWT / Crypt::JWT (ADR-009) |
 | Contrato de API | OpenAPI v3 + Mojolicious::Plugin::OpenAPI (ADR-015) |
 | Testes | Test::Mojo + prove + Devel::Cover (ADR-011) |
@@ -368,8 +369,8 @@ nova com referência externa, proposta pelo usuário.
 Follow this sequence when resuming work on this project:
 
 1. Re-read this file in full.
-2. Check `docs/adrs/` to understand what has already been decided. As of 2026-07-03
-   existem ADR-000 a ADR-021 cobrindo todo o stack. ADR-019 define o cabeçalho padrão
+2. Check `docs/adrs/` to understand what has already been decided. Existem
+   ADR-000 a ADR-024 cobrindo todo o stack. ADR-019 define o cabeçalho padrão
    de código Perl; ADR-020 define o padrão Domain + Repository (validação de negócio
    com estado, complementar à Policy da ADR-011); ADR-021 define `Stega::Config`,
    módulo único de leitura de variáveis de ambiente (usado tanto pela app via
@@ -379,36 +380,44 @@ Follow this sequence when resuming work on this project:
    2026-07-04 para corrigir divergências entre a decisão registrada e a implementação
    real (ADR-008 previa `Mojo::RabbitMQ::Client`, nunca usado — publicação sempre via
    job Minion; ADR-015 previa validação manual, mas o plugin
-   `Mojolicious::Plugin::OpenAPI` sempre foi usado para validação automática). Não há
-   mais decisões TBD entre as ADRs `Aceita`.
-   **ADR-022 (Proposta, 2026-07-04)** — pendente de decisão do usuário: propõe
-   revogar a ADR-008 (RabbitMQ) e mover filas para PostgreSQL (candidato: PgQue),
-   motivada pela impossibilidade de compilar `Net::AMQP::RabbitMQ` no Windows e pelo
-   fim de manutenção dos clientes AMQP alternativos em Perl. Tem um estudo técnico
-   completo anexado em `docs/adrs/references/ADR-022-estudo-filas-postgresql.md`.
-   Enquanto o status permanecer `Proposta`, a ADR-008 continua `Aceita` e em vigor —
-   não tratar RabbitMQ como removido do stack até o usuário aceitar a ADR-022.
-   Em 2026-07-07 a proposta foi revisada contra o código real do PgQue e da Stega
-   (correções: `maint_rotate_tables_step2()` obrigatório no ticker externo;
-   LISTEN/NOTIFY existe na v0.2.0) e **os riscos da seção 11 do estudo foram
-   analisados e aceitos pelo usuário** (ver notas "Revisão 2026-07-07" nas duas
-   ADRs) — não re-perguntar sobre eles; falta só a mudança formal de status.
-   **ADR-023 (Proposta, 2026-07-04, revisada 2026-07-07)** — ortogonal à
-   ADR-022: propõe uma instância PostgreSQL dedicada por finalidade (`db-app`,
-   `db-jobs`, `db-events`, e `postgres-keycloak` dedicado ao Keycloak) em vez de
-   uma única instância compartilhada. A separação de `db-jobs` (Minion) independe
-   da ADR-022; `db-events` (PgQue) só existe se a ADR-022 também for aceita. O
-   mecanismo de tick do PgQue (se aceito) é um processo próprio de longa duração
-   (`Deployment`), não `pg_cron` nem `CronJob`. Enquanto `Proposta`, o stack
-   continua com uma única instância PostgreSQL.
-3. Check `docs/references/` to understand what sources are in play (36 fontes).
+   `Mojolicious::Plugin::OpenAPI` sempre foi usado para validação automática).
+   **Em 2026-07-07, ADR-022 e ADR-023 foram aceitas** (após revisão contra o
+   código real do PgQue e da Stega, e após os riscos da seção 11 do estudo anexo
+   terem sido analisados e aceitos pelo usuário — ver notas "Revisão 2026-07-07"
+   nas duas ADRs): ADR-008 (RabbitMQ) passou a `Substituída por ADR-022`; PgQue
+   substitui o RabbitMQ como mecanismo de filas de eventos multi-consumidor, e o
+   stack passou de uma instância PostgreSQL compartilhada para quatro instâncias
+   dedicadas por finalidade (`db-app`, `db-jobs`, `db-events`, `postgres-keycloak`
+   — ADR-023). A mesma revisão também acrescentou uma nota à ADR-013 ("Revisão
+   2026-07-07"): `script/` passou a abrigar todo processo de execução da
+   aplicação (não só o entry point Mojolicious) — `script/worker` (movido de
+   `eng/worker.pl`) e o novo `script/pgque_ticker`, sem extensão `.pl`; `eng/`
+   permanece restrito a ferramentas de apoio ao desenvolvimento/implantação
+   (migrate/seed/setup/keycloak_test_users/bootstrap_pgque). A implementação
+   completa na Stega (código, testes, `compose.yml`, `TESTING.md`) e a
+   atualização de toda a documentação central (Guias 1/2/4/5/7/8/9,
+   `docs/stack/`, `docs/references/`, este arquivo) foram feitas na mesma
+   sessão. Não há mais decisões TBD entre as ADRs `Aceita`.
+   **A validação nativa no Windows dessa mesma migração (2026-07-08) achou um
+   problema não relacionado ao PgQue**: `Minion.pm` não roda nativamente no
+   Windows (`croak 'Minion workers do not support fork emulation'` quando
+   `$Config{d_pseudofork}` é verdadeiro — caso do Strawberry/berrybrew),
+   afetando tanto `carton exec perl script/stega minion worker` quanto testes
+   que chamam `perform_jobs` (`t/030_webhooks.t`, `t/070_notifications.t`,
+   corrigidos com guardas `skip_all`). Não é causado pela ADR-022 — é uma
+   limitação pré-existente do Minion (ADR-008) — mas é a última exceção de
+   plataforma que resta no stack. Registrado como **ADR-024** (`Proposta`,
+   documenta só o problema e um inventário de uso real do Minion na Stega,
+   sem decisão — ver a ADR para as perguntas em aberto, entre elas se o PgQue
+   sozinho cobriria os cenários de job atuais).
+3. Check `docs/references/` to understand what sources are in play (38 fontes).
 4. Ask the user what they want to work on before creating files.
 5. If the user provides new reference URLs, create reference files first,
    then link them from relevant ADRs/guides.
 6. Todas as decisões de stack estão tomadas, e a trilha completa de guias de usuário
    em `docs/guides/` está escrita (1–9: ambiente, estrutura mínima, primeira rota,
    modelos de domínio/regras de negócio, banco de dados, autenticação Keycloak,
-   contrato OpenAPI, RabbitMQ/Minion, containerização/deployment) — todos usando a
+   contrato OpenAPI, PgQue/Minion, containerização/deployment) — todos usando a
    Stega (ADR-018) como aplicação de referência. Em 2026-07-03 o padrão Domain +
    Repository (ADR-020) foi replicado do piloto em `Product` para `Ticket` e
    `Comment` na Stega, com um ajuste de escopo em relação ao piloto original: o
@@ -471,19 +480,21 @@ Todas as questões de fundação estão respondidas. As decisões estão registr
 | Framework web | Mojolicious + Hypnotoad | ADR-004 |
 | Gerenciamento de dependências | Carton + cpanm | ADR-005 |
 | Sistema de OO | Moo + Moo::Role | ADR-006 |
-| Banco de dados | PostgreSQL 17 | ADR-007 |
-| Message broker | RabbitMQ (AMQP 0-9-1) | ADR-008 |
+| Banco de dados | PostgreSQL 17, quatro instâncias por finalidade | ADR-007, ADR-023 |
+| Message broker (histórico, revogado) | RabbitMQ (AMQP 0-9-1) | ADR-008 (Substituída por ADR-022) |
+| Filas em PostgreSQL (PgQue) | Substitui o RabbitMQ para eventos multi-consumidor | ADR-022 |
+| Topologia de instâncias PostgreSQL | `db-app`/`db-jobs`/`db-events`/Keycloak separados | ADR-023 |
 | Autenticação | Keycloak + JWT (Crypt::JWT) | ADR-009 |
 | Orquestração | Kubernetes | ADR-010 |
 | Estratégia de testes | Test::Mojo + prove + Devel::Cover | ADR-011 |
 | Estrutura mínima de projeto | `.gitignore`, `.gitattributes`, README, DEVELOPMENT | ADR-012 |
-| Scripts de engenharia | Perl em `eng/`, wrappers `.ps1` para Windows | ADR-013 |
+| Scripts de engenharia/execução | Perl em `eng/` (apoio ao dev) e `script/` (processos da app) | ADR-013 |
 | Ambiente de desenvolvimento local | perlbrew / berrybrew / Docker Compose | ADR-014 |
 | Contrato de API | OpenAPI v3 + Mojolicious::Plugin::OpenAPI | ADR-015 |
 | Acesso a dados relacional | Mojo::Pg + Mojo::Pg::Migrations | ADR-016 |
 | Acesso a dados documentais | PostgreSQL JSONB via Mojo::Pg | ADR-017 |
 | Aplicação de demonstração | Stega (hibex-solutions/crystallized-perl-stega) | ADR-018 |
-| Referências externas | 36 fontes em `docs/references/` | — |
+| Referências externas | 38 fontes em `docs/references/` | — |
 
 **Próximos passos**: escrever os guias de usuário em `docs/guides/`, usando a Stega
 (ADR-018) como aplicação de referência. O scaffolding do Docusaurus já está feito.

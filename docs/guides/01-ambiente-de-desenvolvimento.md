@@ -15,7 +15,8 @@ Ao final deste guia você terá um ambiente de desenvolvimento funcional com:
 
 - Perl **5.42.2** instalado e isolado do Perl do sistema operacional
 - **Carton** configurado para gerenciamento de dependências do projeto
-- **Docker Compose** rodando PostgreSQL 17, RabbitMQ 4.3 e Keycloak 26.6
+- **Docker Compose** rodando quatro instâncias PostgreSQL 17 (`db-app`/`db-jobs`/
+  `db-events`/Keycloak, ADR-023) e Keycloak 26.6
 - O repositório `crystallized-perl-stega` clonado e com dependências instaladas
 - A aplicação Stega iniciada em modo de desenvolvimento em `http://localhost:3000`
 
@@ -208,8 +209,9 @@ Pule para [Clonar e configurar a Stega](#clonar-e-configurar-a-stega).
 
 ## Caminho C — Docker Compose (recomendado) {#caminho-c-docker-compose-recomendado}
 
-Este caminho usa containers para tudo: Perl, PostgreSQL, RabbitMQ e Keycloak.
-Nenhum Perl local é necessário — o container usa a mesma imagem de produção.
+Este caminho usa containers para tudo: Perl, as quatro instâncias PostgreSQL e
+Keycloak. Nenhum Perl local é necessário — o container usa a mesma imagem de
+produção.
 
 Verifique o Docker:
 
@@ -224,6 +226,22 @@ o `compose.yml` da Stega inicia todos os serviços, incluindo a aplicação.
 ---
 
 ## Clonar e configurar a Stega
+
+:::caution Windows/PowerShell — leia antes do primeiro `carton exec`
+Encadeie `| Out-Host` em **qualquer** `carton exec perl ...` ou `carton exec prove ...`
+deste guia que imprime no terminal (ex.: `carton exec perl eng/migrate.pl | Out-Host`)
+— não é específico de nenhum script em particular. Windows não tem um `exec()` real
+(só emulação por spawn+wait), o que afeta a sincronia de qualquer saída de
+`carton exec`; sem `| Out-Host` o texto aparece atrasado e dessincronizado do prompt
+(às vezes só depois de apertar Enter várias vezes). Rode também, uma vez por sessão
+de terminal:
+```powershell
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; chcp 65001 | Out-Null
+```
+Sem isso, `| Out-Host` corrige a sincronia mas introduz acentos corrompidos
+(`Vers├úo` em vez de `Versão`). Ver a tabela "Solução de problemas comuns" no final
+deste guia para o detalhamento completo.
+:::
 
 ### 1. Clonar o repositório
 
@@ -244,21 +262,23 @@ Para o caminho A ou B (Perl nativo), ajuste as URLs de banco se necessário:
 ```bash
 # .env — valores padrão para desenvolvimento local (copie de .env.example)
 
-# Servidor/porta/banco — sem credencial (ver Revisão 2026-07-04 da ADR-016)
-POSTGRESQL_APP_URL=postgresql://localhost:5432/stega
-
-# Aplicação — conexão principal (mesmo usuário em desenvolvimento; distintos em produção)
+# Servidor/porta/banco — sem credencial (ver Revisão 2026-07-04 da ADR-016).
+# Três instâncias PostgreSQL distintas (ADR-023), portas de host diferentes.
+POSTGRESQL_APP_URL=postgresql://localhost:55432/stega-app
 POSTGRESQL_APP_USERNAME=postgres
 POSTGRESQL_APP_PASSWORD=postgres_dev
-
-# Migration — mesma credencial em desenvolvimento (usuários distintos em produção)
 POSTGRESQL_APP_MIGRATION_USERNAME=postgres
 POSTGRESQL_APP_MIGRATION_PASSWORD=postgres_dev
 
-# RabbitMQ
-RABBITMQ_HOST=localhost
-RABBITMQ_USER=stega
-RABBITMQ_PASSWORD=dev_password
+# db-jobs — backend do Minion (ADR-023)
+POSTGRESQL_JOBS_URL=postgresql://localhost:55433/stega-jobs
+POSTGRESQL_JOBS_USERNAME=postgres
+POSTGRESQL_JOBS_PASSWORD=postgres_dev
+
+# db-events — PgQue, fila de eventos multi-consumidor (ADR-022/ADR-023)
+POSTGRESQL_EVENTS_URL=postgresql://localhost:55434/stega-events
+POSTGRESQL_EVENTS_USERNAME=postgres
+POSTGRESQL_EVENTS_PASSWORD=postgres_dev
 
 # Keycloak
 KEYCLOAK_URL=http://localhost:8080
@@ -274,8 +294,12 @@ TEST_JWT_SECRET=test_secret_apenas_para_desenvolvimento
 **Caminho A ou B (Perl nativo):**
 
 ```bash
-# Sobe apenas PostgreSQL, RabbitMQ e Keycloak — sem a aplicação
-docker compose up -d postgres rabbitmq keycloak
+# Sobe as quatro instâncias PostgreSQL e o Keycloak — sem a aplicação
+docker compose up -d postgres-app postgres-jobs postgres-events postgres-keycloak keycloak
+
+# Instala o PgQue em db-events (idempotente — ver Guia 8/ADR-022)
+carton exec perl eng/bootstrap_pgque.pl
+# Windows/PowerShell: carton exec perl eng/bootstrap_pgque.pl | Out-Host
 ```
 
 **Caminho C (Docker Compose completo):**
@@ -291,10 +315,12 @@ Verifique:
 
 ```bash
 docker compose ps
-# NAME                 STATUS
-# stega-postgres       Up (healthy)
-# stega-rabbitmq       Up (healthy)
-# stega-keycloak       Up (healthy)
+# NAME                    STATUS
+# stega-postgres-app      Up (healthy)
+# stega-postgres-jobs     Up (healthy)
+# stega-postgres-events   Up (healthy)
+# stega-postgres-keycloak Up (healthy)
+# stega-keycloak          Up (healthy)
 ```
 
 ### 4. Instalar dependências (caminhos A e B apenas)
@@ -306,18 +332,30 @@ carton install
 O Carton lê o `cpanfile.snapshot` e instala as versões exatas de todos os módulos
 no diretório `local/`. Módulos XS como `DBD::Pg` precisam de compilador C —
 disponível por padrão no Strawberry Perl (Windows) e nas imagens Perl do Docker.
+Nenhum módulo de fila exige compilador C (PgQue é SQL puro, consumido via
+`Mojo::Pg` — ADR-022).
 
-**Windows nativo**: `Net::AMQP::RabbitMQ` falha ao instalar
-(`undefined reference to 'poll'`) — é uma limitação real do pacote no MinGW/Winsock, não uma falta de
-ferramenta. Os demais módulos instalam normalmente; esse módulo só é usado pelo
-worker de notificações da Stega. Veja a tabela de "Solução de problemas comuns" no
-final deste guia.
+> **Exceção que continua existindo, sem relação com compilador C**: o worker do
+> Minion (`carton exec perl script/stega minion worker`, Passo 4 do
+> [Guia 8](/guides/filas-com-pgque-e-minion)) não roda em Windows nativo —
+> `Minion.pm::worker()` recusa operar em qualquer Perl com fork emulado via
+> ithreads (`$Config{d_pseudofork}`, o caso do Strawberry/berrybrew), com o erro
+> `Minion workers do not support fork emulation`. É uma restrição do próprio
+> Minion (ADR-008), não da migração para PgQue desta ADR-022, e não tem solução
+> no lado da aplicação. Use o Caminho C (Docker Compose) ou WSL2 só para esse
+> processo — os demais (`daemon`, `script/worker`, `script/pgque_ticker`,
+> scripts de `eng/`) rodam nativamente sem exceção. Ver "Revisão 2026-07-08" na
+> [ADR-014](/adrs/ADR-014-ambiente-de-desenvolvimento-local). Resolver essa
+> exceção de vez (não só contorná-la) é pendência de pesquisa aberta na
+> [ADR-024](/adrs/ADR-024-jobs-assincronos-multiplataforma) — ainda `Proposta`,
+> sem decisão.
 
 ### 5. Aplicar as migrations do banco
 
 ```bash
 # Caminhos A e B (Perl nativo):
 carton exec perl eng/migrate.pl
+# Windows/PowerShell: carton exec perl eng/migrate.pl | Out-Host
 
 # Caminho C (dentro do container):
 docker compose exec app perl eng/migrate.pl
@@ -334,6 +372,7 @@ tabela `users` (o identificador primário é `keycloak_id`, não o e-mail).
 ```bash
 # Caminhos A e B:
 carton exec perl eng/seed.pl
+# Windows/PowerShell: carton exec perl eng/seed.pl | Out-Host
 
 # Caminho C:
 docker compose exec app perl eng/seed.pl
@@ -343,10 +382,12 @@ docker compose exec app perl eng/seed.pl
 
 ```bash
 carton exec perl script/stega daemon --listen http://*:3000
+# Windows/PowerShell: carton exec perl script/stega daemon --listen http://*:3000 | Out-Host
 ```
 
 Para o Caminho C, a aplicação já está rodando após `docker compose --profile full up`
-(os serviços `migrate`, `seed` e `app` sobem automaticamente nessa ordem).
+(os serviços `migrate`, `bootstrap-pgque`, `seed` e `app` sobem automaticamente
+nessa ordem).
 
 ### 8. Verificar
 
@@ -372,8 +413,9 @@ docker compose ps
 # Endpoint de saúde da aplicação
 curl -s http://localhost:3000/healthz | grep ok
 
-# Painel do RabbitMQ (Management UI)
-# http://localhost:15672 — usuário: stega / senha: dev_password
+# Observabilidade do PgQue via SQL puro (sem painel externo — ADR-022)
+docker compose exec postgres-events psql -U postgres -d stega-events \
+  -c "select * from pgque.get_queue_info();"
 
 # Keycloak Admin Console
 # http://localhost:8080 — usuário: admin / senha: admin
@@ -386,12 +428,14 @@ curl -s http://localhost:3000/healthz | grep ok
 ```bash
 # Rodar os testes
 carton exec prove -lr t/
+# Windows/PowerShell: carton exec prove -lr t/ | Out-Host
 
 # Rodar um arquivo de teste específico
 carton exec prove -lv t/001_health.t
+# Windows/PowerShell: carton exec prove -lv t/001_health.t | Out-Host
 
 # Reiniciar apenas um serviço de apoio
-docker compose restart postgres
+docker compose restart postgres-app
 
 # Encerrar tudo
 docker compose down
@@ -415,7 +459,8 @@ docker compose down -v
 | Keycloak lento para iniciar | Primeira inicialização | Normal — aguarde ~45 segundos |
 | `berrybrew available` não lista a versão desejada | Cache local de versões desatualizado | Rode `berrybrew fetch` antes de `berrybrew available` |
 | `cpanm Carton` falha ao construir `Parse::PMFile` (ou outra dependência transitiva) | Suite de testes de uma dependência do Carton falha no ambiente, sem que o módulo deixe de funcionar | Use `cpanm --notest Carton` — confirmado funcional no Windows/berrybrew |
-| `Net::AMQP::RabbitMQ` falha ao instalar no Windows (`undefined reference to 'poll'`) | O módulo embute um cliente C (`rabbitmq-c`) que assume `poll()`, ausente no MinGW/Winsock — limitação real do pacote, não resolvível com `--notest`/`--force` | Use o Caminho C (Docker Compose) para o que depender desse módulo; o restante da aplicação funciona com Perl nativo, já que o módulo só é carregado por código de worker/notificação |
+| Notificações nunca chegam mesmo com `script/worker` rodando | `script/pgque_ticker` não está rodando — sem tick, `pgque.receive()` nunca retorna nada | Rode `carton exec perl script/pgque_ticker` (ou, no Caminho C, `docker compose --profile full up -d pgque-ticker`) |
+| `Minion workers do not support fork emulation` ao rodar `script/stega minion worker` (ou em testes que chamam `perform_jobs`, como `t/030_webhooks.t`/`t/070_notifications.t`) | Limitação do próprio Minion em Windows nativo (`$Config{d_pseudofork}` verdadeiro — fork emulado via ithreads, sem `fork()` real do SO); não relacionada ao PgQue | Rode o worker Minion via Caminho C (Docker Compose) ou WSL2 — os testes afetados já pulam sozinhos (`skip_all`) nesse ambiente. Resolver de vez é pendência da [ADR-024](/adrs/ADR-024-jobs-assincronos-multiplataforma) |
 | `perl`/`prove` sem `carton exec` "funciona" mesmo assim | Strawberry Perl empacota módulos comuns (ex.: `Moo`) em `perl/vendor/lib` — o comando acidentalmente usa essa cópia global em vez da versão travada no `cpanfile.snapshot` | Sempre prefixe `carton exec`; confirme com `carton exec perl -MMoo -e "print $INC{'Moo.pm'}"` — deve apontar para `local/lib/perl5`, nunca para `vendor/lib` |
 | `carton exec perl`/`carton exec prove` sai atrasado ou corrompido no Windows | Windows não tem `exec()` real, só emulação por spawn+wait — `carton exec` sempre adiciona uma camada de processo extra, o que afeta a sincronia de qualquer saída (não só `prove`); no `prove`, que usa retorno de carro (`\r`) para a linha de progresso, o mesmo problema aparece como texto sobreposto/corrompido em vez de só atrasado | Encadeie `\| Out-Host` em qualquer comando que imprime para o terminal: `carton exec perl eng\migrate.pl \| Out-Host`, `carton exec prove -lr t\ \| Out-Host` |
 | `\| Out-Host` corrige a sincronia mas os acentos saem corrompidos (`Vers├úo`) | `[Console]::OutputEncoding` do PowerShell normalmente não é UTF-8; o pipeline decodifica a saída (que já está em UTF-8 correto) com o codepage errado | Rode uma vez por sessão: `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; chcp 65001 \| Out-Null` |

@@ -17,16 +17,18 @@ Ao final deste guia você terá:
 
 - Um `Dockerfile` multi-stage (`deps → test → production`) — os testes bloqueiam a
   geração da imagem final se falharem
-- `compose.yml` com um perfil completo (`full`) rodando os três processos da Stega
-  inteiramente em containers, sem Perl local
-- Manifests de Kubernetes: InitContainer de migrations, Deployment da API e dos
-  workers, Health Probes, Secret/ConfigMap
+- `compose.yml` com um perfil completo (`full`) rodando os quatro processos da
+  Stega e as quatro instâncias PostgreSQL inteiramente em containers, sem Perl
+  local
+- Manifests de Kubernetes: InitContainers de migrations e bootstrap do PgQue,
+  Deployment da API e dos workers (incluindo o ticker do PgQue), Health Probes,
+  Secret/ConfigMap
 
 ---
 
 ## Pré-requisitos
 
-- [Guia 8](/guides/rabbitmq-e-minion) concluído
+- [Guia 8](/guides/filas-com-pgque-e-minion) concluído
 - Docker Desktop (ou engine equivalente) com suporte a BuildKit
 - Um cluster Kubernetes para a parte final (`kind`/`minikube` servem para testar
   localmente; nenhum comando deste guia precisa de um cluster real até lá)
@@ -47,7 +49,6 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
-    librabbitmq-dev \
     libssl-dev \
     gcc \
     make \
@@ -61,7 +62,7 @@ RUN carton install
 # Estágio 2: imagem para execução dos testes (inclui t/ e ferramentas de build)
 FROM deps AS test
 
-COPY lib templates public api migrations eng script t cpanfile ./
+COPY lib templates public api migrations eng script t cpanfile vendor ./
 
 ENV PERL5LIB=/app/local/lib/perl5
 ENV PATH=/app/local/bin:$PATH
@@ -73,12 +74,11 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
-    librabbitmq4 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /app/local ./local
-COPY lib templates public api migrations eng script cpanfile ./
+COPY lib templates public api migrations eng script cpanfile vendor ./
 
 ENV PERL5LIB=/app/local/lib/perl5
 ENV PATH=/app/local/bin:$PATH
@@ -91,12 +91,12 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 CMD ["hypnotoad", "-f", "script/stega"]
 ```
 
-Note que a imagem final não instala `gcc`/`make`/`libpq-dev` — só as bibliotecas de
+Note que a imagem final não instala `gcc`/`make`/`libpq-dev` — só a biblioteca de
 runtime (`libpq5`, não `libpq-dev`) — porque os módulos XS já foram compilados no
-estágio `deps` e só o resultado (`local/`) é copiado adiante. `librabbitmq4` (runtime)
-está presente mesmo que `Net::AMQP::RabbitMQ` só seja usado pelos processos de
-worker — a mesma imagem serve os três processos (Guia 8), então precisa ter tudo que
-qualquer um deles usa.
+estágio `deps` e só o resultado (`local/`) é copiado adiante. Nenhum módulo de
+fila exige compilador C (PgQue é SQL puro, consumido via `Mojo::Pg`, ADR-022) —
+a mesma imagem serve os quatro processos (Guia 8), incluindo `vendor/pgque/pgque.sql`,
+usado pelo InitContainer/serviço de bootstrap do PgQue (Passo 3).
 
 O `HEALTHCHECK` do Dockerfile usa a mesma rota `/healthz` que o Kubernetes vai
 consultar depois — dois níveis de verificação com a mesma fonte da verdade.
@@ -112,7 +112,7 @@ docker build --target test -t stega:test .   # imagem intermediária, com t/
 
 ## Passo 2 — Docker Compose completo (perfil `full`)
 
-Um perfil `full` sobe os três processos da Stega inteiramente containerizados —
+Um perfil `full` sobe os quatro processos da Stega inteiramente containerizados —
 útil para quem quer validar sem Perl instalado localmente (ver Guia 1, Caminho C):
 
 ```yaml
@@ -121,12 +121,24 @@ services:
     profiles: [full]
     build: .
     depends_on:
-      postgres: { condition: service_healthy }
+      postgres-app: { condition: service_healthy }
     environment:
-      POSTGRESQL_APP_URL: postgresql://postgres:5432/stega
+      POSTGRESQL_APP_URL: postgresql://postgres-app:5432/stega-app
       POSTGRESQL_APP_MIGRATION_USERNAME: postgres
       POSTGRESQL_APP_MIGRATION_PASSWORD: postgres_dev
     command: perl eng/migrate.pl
+    restart: "no"
+
+  bootstrap-pgque:
+    profiles: [full]
+    build: .
+    depends_on:
+      postgres-events: { condition: service_healthy }
+    environment:
+      POSTGRESQL_EVENTS_URL: postgresql://postgres-events:5432/stega-events
+      POSTGRESQL_EVENTS_USERNAME: postgres
+      POSTGRESQL_EVENTS_PASSWORD: postgres_dev
+    command: perl eng/bootstrap_pgque.pl
     restart: "no"
 
   app:
@@ -135,10 +147,15 @@ services:
     depends_on:
       seed: { condition: service_completed_successfully }
     environment:
-      POSTGRESQL_APP_URL: postgresql://postgres:5432/stega
+      POSTGRESQL_APP_URL: postgresql://postgres-app:5432/stega-app
       POSTGRESQL_APP_USERNAME: postgres
       POSTGRESQL_APP_PASSWORD: postgres_dev
-      RABBITMQ_HOST: rabbitmq
+      POSTGRESQL_JOBS_URL: postgresql://postgres-jobs:5432/stega-jobs
+      POSTGRESQL_JOBS_USERNAME: postgres
+      POSTGRESQL_JOBS_PASSWORD: postgres_dev
+      POSTGRESQL_EVENTS_URL: postgresql://postgres-events:5432/stega-events
+      POSTGRESQL_EVENTS_USERNAME: postgres
+      POSTGRESQL_EVENTS_PASSWORD: postgres_dev
     ports: ["3000:3000"]
     command: perl script/stega daemon
 
@@ -147,20 +164,60 @@ services:
     build: .
     depends_on:
       seed: { condition: service_completed_successfully }
+      bootstrap-pgque: { condition: service_completed_successfully }
+    environment:
+      # Stega.pm::startup configura as três instâncias Mojo::Pg
+      # incondicionalmente (ADR-023), qualquer que seja o subcomando — os
+      # Jobs Minion usam $app->pg (db-app: ex.: criar um ticket a partir de
+      # um webhook) e $app->pg_events (db-events: publicar notificações),
+      # não só o backend do próprio Minion (db-jobs). Faltar qualquer uma
+      # das três faz Jobs específicos falharem em runtime, não no boot do
+      # worker — mais fácil de esquecer do que parece, achado real ao
+      # validar o roteiro de webhooks do TESTING.md.
+      POSTGRESQL_APP_URL: postgresql://postgres-app:5432/stega-app
+      POSTGRESQL_APP_USERNAME: postgres
+      POSTGRESQL_APP_PASSWORD: postgres_dev
+      POSTGRESQL_JOBS_URL: postgresql://postgres-jobs:5432/stega-jobs
+      POSTGRESQL_JOBS_USERNAME: postgres
+      POSTGRESQL_JOBS_PASSWORD: postgres_dev
+      POSTGRESQL_EVENTS_URL: postgresql://postgres-events:5432/stega-events
+      POSTGRESQL_EVENTS_USERNAME: postgres
+      POSTGRESQL_EVENTS_PASSWORD: postgres_dev
     command: perl script/stega minion worker
+    healthcheck: { disable: true }   # não serve HTTP — ver nota abaixo
+
+  pgque-ticker:
+    profiles: [full]
+    build: .
+    depends_on:
+      bootstrap-pgque: { condition: service_completed_successfully }
+    deploy:
+      replicas: 1    # obrigatório — PgQue não coordena ticker() concorrente
+    command: perl script/pgque_ticker
+    healthcheck: { disable: true }   # não serve HTTP — ver nota abaixo
 
   notification-worker:
     profiles: [full]
     build: .
     depends_on:
-      rabbitmq: { condition: service_healthy }
-    command: perl eng/worker.pl
+      bootstrap-pgque: { condition: service_completed_successfully }
+    command: perl script/worker
+    healthcheck: { disable: true }   # não serve HTTP — ver nota abaixo
 ```
 
-`migrate` roda uma vez e sai (`restart: "no"`) — é o equivalente, em Docker Compose,
-ao InitContainer do Kubernetes (Passo 3): um processo curto que precisa terminar
-com sucesso *antes* de `app` subir, usando
-`depends_on: condition: service_completed_successfully`.
+As três imagens de worker herdam o `HEALTHCHECK` do Dockerfile (Passo 1) —
+`curl` a `/healthz` na porta 3000 — mas nenhuma delas serve HTTP, então nunca
+ficariam `healthy` por definição, só `unhealthy` indefinidamente. Desabilitado
+por serviço no `compose.yml` (`healthcheck: { disable: true }`), não no
+Dockerfile — o `app` continua precisando do healthcheck real.
+
+`migrate` e `bootstrap-pgque` rodam uma vez e saem (`restart: "no"`) — são o
+equivalente, em Docker Compose, aos InitContainers do Kubernetes (Passo 3):
+processos curtos que precisam terminar com sucesso *antes* de `app`/
+`notification-worker` subirem, usando
+`depends_on: condition: service_completed_successfully`. São dois passos
+distintos, com nomes próprios — "aplicar migrations do domínio" (`db-app`) não é
+"instalar o PgQue" (`db-events`), mesmo sendo ambos idempotentes (ADR-023).
 
 ```bash
 docker compose --profile full up --build
@@ -208,6 +265,20 @@ spec:
               valueFrom:
                 secretKeyRef: { name: stega-secrets, key: POSTGRESQL_APP_MIGRATION_PASSWORD }
 
+        - name: bootstrap-pgque
+          image: registry.example.com/stega:latest
+          command: ["carton", "exec", "perl", "eng/bootstrap_pgque.pl"]
+          env:
+            - name: POSTGRESQL_EVENTS_URL
+              valueFrom:
+                configMapKeyRef: { name: stega-config, key: POSTGRESQL_EVENTS_URL }
+            - name: POSTGRESQL_EVENTS_USERNAME
+              valueFrom:
+                secretKeyRef: { name: stega-secrets, key: POSTGRESQL_EVENTS_USERNAME }
+            - name: POSTGRESQL_EVENTS_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: stega-secrets, key: POSTGRESQL_EVENTS_PASSWORD }
+
       containers:
         - name: api
           image: registry.example.com/stega:latest
@@ -216,8 +287,8 @@ spec:
             - containerPort: 3000
 
           envFrom:
-            - secretRef: { name: stega-secrets }      # POSTGRESQL_APP_USERNAME/_PASSWORD, RABBITMQ_*, KEYCLOAK_CLIENT_SECRET
-            - configMapRef: { name: stega-config }     # POSTGRESQL_APP_URL, KEYCLOAK_URL, KEYCLOAK_REALM, etc.
+            - secretRef: { name: stega-secrets }      # POSTGRESQL_APP/JOBS/EVENTS_USERNAME/_PASSWORD, KEYCLOAK_CLIENT_SECRET
+            - configMapRef: { name: stega-config }     # POSTGRESQL_APP/JOBS/EVENTS_URL, KEYCLOAK_URL, KEYCLOAK_REALM, etc.
 
           readinessProbe:
             httpGet: { path: /healthz, port: 3000 }
@@ -292,16 +363,41 @@ spec:
       containers:
         - name: notification-worker
           image: registry.example.com/stega:latest
-          command: ["carton", "exec", "perl", "eng/worker.pl"]
+          command: ["carton", "exec", "perl", "script/worker"]
           envFrom:
             - secretRef: { name: stega-secrets }
             - configMapRef: { name: stega-config }
 ```
 
-Nenhum dos dois Deployments de worker tem `readinessProbe`/`livenessProbe` HTTP —
-eles não servem HTTP. O Kubernetes já reinicia o Pod se o processo morrer (todo
-container reinicia por padrão, `restartPolicy: Always`), o que cobre a maior parte
-do que um health check faria aqui.
+```yaml
+# k8s/pgque-ticker-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stega-pgque-ticker
+spec:
+  replicas: 1    # OBRIGATÓRIO — PgQue não coordena ticker() concorrente fora do pg_cron
+  selector:
+    matchLabels: { app: stega, component: pgque-ticker }
+  template:
+    metadata:
+      labels: { app: stega, component: pgque-ticker }
+    spec:
+      containers:
+        - name: pgque-ticker
+          image: registry.example.com/stega:latest
+          command: ["carton", "exec", "perl", "script/pgque_ticker"]
+          envFrom:
+            - secretRef: { name: stega-secrets }
+            - configMapRef: { name: stega-config }
+```
+
+Nenhum dos três Deployments de worker/ticker tem `readinessProbe`/`livenessProbe`
+HTTP — eles não servem HTTP. O Kubernetes já reinicia o Pod se o processo morrer
+(todo container reinicia por padrão, `restartPolicy: Always`), o que cobre a maior
+parte do que um health check faria aqui. O `stega-pgque-ticker` é o único
+Deployment desta trilha com `replicas` travado em 1 por exigência do PgQue, não
+por escolha de capacidade — nunca escale este Deployment horizontalmente.
 
 ---
 
@@ -318,9 +414,11 @@ stringData:
   POSTGRESQL_APP_PASSWORD:           "senha_app"
   POSTGRESQL_APP_MIGRATION_USERNAME: "stega_migrate"
   POSTGRESQL_APP_MIGRATION_PASSWORD: "senha_migrate"
-  RABBITMQ_HOST:            "rabbitmq-svc"
-  RABBITMQ_PASSWORD:        "senha"
-  KEYCLOAK_CLIENT_SECRET:   "secret"
+  POSTGRESQL_JOBS_USERNAME:          "stega_jobs"
+  POSTGRESQL_JOBS_PASSWORD:          "senha_jobs"
+  POSTGRESQL_EVENTS_USERNAME:        "stega_events"
+  POSTGRESQL_EVENTS_PASSWORD:        "senha_events"
+  KEYCLOAK_CLIENT_SECRET:            "secret"
 
 ---
 apiVersion: v1
@@ -328,11 +426,13 @@ kind: ConfigMap
 metadata:
   name: stega-config
 data:
-  # Servidor/porta/banco — nunca credencial (Revisão 2026-07-04 da ADR-016)
-  POSTGRESQL_APP_URL: "postgresql://postgres-svc:5432/stega"
+  # Servidor/porta/banco — nunca credencial (Revisão 2026-07-04 da ADR-016).
+  # Três instâncias PostgreSQL distintas (ADR-023) — cada uma seu próprio Service.
+  POSTGRESQL_APP_URL:    "postgresql://postgres-app-svc:5432/stega-app"
+  POSTGRESQL_JOBS_URL:   "postgresql://postgres-jobs-svc:5432/stega-jobs"
+  POSTGRESQL_EVENTS_URL: "postgresql://postgres-events-svc:5432/stega-events"
   KEYCLOAK_URL:   "https://auth.example.com"
   KEYCLOAK_REALM: "stega"
-  RABBITMQ_USER:  "stega"
 
 ---
 apiVersion: v1
@@ -358,7 +458,8 @@ facilita saber o que precisa de rotação/Sealed Secrets em produção.
 | Problema | Causa provável | Solução |
 |----------|---------------|---------|
 | Build falha no estágio `test` | Um teste real está quebrando | Rode `carton exec prove -lr t/` localmente antes de buildar |
-| Pod fica em `Init:CrashLoopBackOff` | InitContainer de migration falhando | `kubectl logs <pod> -c migrate` — geralmente credencial DDL errada ou Postgres inacessível |
+| Pod fica em `Init:CrashLoopBackOff` | InitContainer de migration ou bootstrap-pgque falhando | `kubectl logs <pod> -c migrate` ou `-c bootstrap-pgque` — geralmente credencial errada ou a instância PostgreSQL correspondente (`db-app`/`db-events`) inacessível |
+| Notificações nunca chegam mesmo com `notification-worker` rodando | `stega-pgque-ticker` não está rodando, ou tem mais de uma réplica | Confirme `kubectl get deploy stega-pgque-ticker` com `replicas: 1` e Pod `Running` — sem tick, `pgque.receive()` nunca retorna nada (Guia 8) |
 | `readinessProbe` nunca fica `Ready` | `/healthz` checando o banco e o banco está inacessível do Pod | Confirme `POSTGRESQL_APP_URL`/`POSTGRESQL_APP_USERNAME`/`_PASSWORD` e conectividade de rede (NetworkPolicy, Service correto) |
 | Imagem de produção maior que o esperado | Camadas do estágio `deps` (gcc, headers `-dev`) vazando para produção | Confirme que `production` parte de `perl:5.42-slim` limpo, não de `deps` |
 

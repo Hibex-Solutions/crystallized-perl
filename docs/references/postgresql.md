@@ -16,6 +16,9 @@ compatível com todos os ORMs e clientes Perl relevantes.
 - ADR-016: Acesso a Dados Relacional — Mojo::Pg e Migrations
 - ADR-017: Acesso a Dados de Documentos — PostgreSQL JSONB
 - ADR-018: Aplicação de Demonstração — Stega
-- [ADR-022](../adrs/ADR-022-filas-em-postgresql.md): Filas em PostgreSQL — proposta
-  (não aceita) de revogação do RabbitMQ, com base em `SKIP LOCKED`, `LISTEN`/`NOTIFY`
-  e autovacuum/`TRUNCATE` documentados na versão 17
+- [ADR-022](../adrs/ADR-022-filas-em-postgresql.md): Filas em PostgreSQL —
+  revogação do RabbitMQ (aceita em 2026-07-07), com base em `SKIP LOCKED`,
+  `LISTEN`/`NOTIFY` e autovacuum/`TRUNCATE` documentados na versão 17
+- [ADR-023](../adrs/ADR-023-topologia-de-instancias-postgresql.md): Topologia de
+  Instâncias PostgreSQL — quatro instâncias dedicadas por finalidade em vez de
+  uma compartilhada (aceita em 2026-07-07)

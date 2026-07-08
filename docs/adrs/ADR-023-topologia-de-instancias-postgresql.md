@@ -1,22 +1,22 @@
 # ADR-023: Topologia de Instâncias PostgreSQL por Finalidade
 
-**Status**: Proposta
+**Status**: Aceita
 **Data**: 2026-07-04
+**Aceita em**: 2026-07-07
 
-> Esta ADR está em avaliação. É ortogonal à [ADR-022](ADR-022-filas-em-postgresql.md)
-> (que decide o *mecanismo* de filas) — esta decide a *topologia*: quantas
-> instâncias PostgreSQL o stack provisiona e para quê. A separação de `db-jobs` não
-> depende da ADR-022 ser aceita; a existência de `db-events` depende. Enquanto o
-> status permanecer `Proposta`, o stack continua com uma única instância PostgreSQL
-> compartilhada, como descrito hoje na ADR-016 e na nota "Minion" da ADR-008.
+> É ortogonal à [ADR-022](ADR-022-filas-em-postgresql.md) (que decide o
+> *mecanismo* de filas) — esta decide a *topologia*: quantas instâncias
+> PostgreSQL o stack provisiona e para quê. A separação de `db-jobs` não
+> depende da ADR-022; a existência de `db-events` depende — e a ADR-022 foi
+> aceita no mesmo dia, então as duas estão em vigor juntas.
 
 **Revisão 2026-07-07 — riscos analisados e aceitos**: o ponto de decisão da
 seção 11 do estudo anexo à ADR-022 que pertence a esta ADR — exigir as
 instâncias PostgreSQL separadas **também em desenvolvimento** (quatro
 containers no Docker Compose, ambiente local mais pesado), em nome da paridade
 dev/produção — foi revisado explicitamente com o usuário e o custo está
-**aceito como proposto**. Nenhuma questão pendente resta nesta ADR além da
-própria mudança de status para `Aceita`.
+**aceito como proposto**. Nenhuma questão pendente resta nesta ADR — status
+alterado para `Aceita` e implementação concluída na Stega no mesmo dia.
 
 ## Contexto
 
@@ -204,14 +204,15 @@ conexões distintas, cada uma para seu próprio destino, com sua própria creden
 Não há federação, proxy ou túnel entre instâncias — é justamente a ausência disso
 que permite essa flexibilidade.
 
-**Mudança concreta em relação ao código de hoje**: a
-[ADR-008 (nota "Minion")](ADR-008-message-broker-rabbitmq.md) e o
-[Guia 8](../guides/08-rabbitmq-e-minion.md) registram o Minion hoje com
-`$self->plugin('Minion', Pg => $self->pg)` — reaproveitando a mesma instância
-`Mojo::Pg` da aplicação, porque hoje só existe uma instância PostgreSQL para tudo.
-Se esta ADR for aceita, isso deixa de ser correto: o Minion passa a exigir sua
-própria instância `Mojo::Pg`, construída a partir de `POSTGRESQL_JOBS_URL` +
-credencial C — nunca `$self->pg`. É uma mudança pequena no código, mas fácil de
+**Mudança concreta em relação ao código anterior a esta ADR**: a
+[ADR-008 (nota "Minion")](ADR-008-message-broker-rabbitmq.md) e o antigo Guia 8
+registravam o Minion com `$self->plugin('Minion', Pg => $self->pg)` —
+reaproveitando a mesma instância `Mojo::Pg` da aplicação, porque só existia uma
+instância PostgreSQL para tudo. Com esta ADR aceita, isso deixa de ser correto: o
+Minion passa a exigir sua própria instância `Mojo::Pg` (ver
+[Guia 8](../guides/08-filas-com-pgque-e-minion.md) atual), construída a partir de
+`POSTGRESQL_JOBS_URL` + credencial C — nunca `$self->pg`. É uma mudança pequena no
+código, mas fácil de
 esquecer, e do tipo que só aparece em produção: em desenvolvimento, se `db-app` e
 `db-jobs` apontarem para o mesmo servidor por descuido de configuração, o bug fica
 mascarado (tudo continua funcionando, só que sem o isolamento que esta ADR existe
@@ -314,7 +315,7 @@ que o achado da PlanetScale descreve.
   superfície para confundir qual conexão usar onde (ver seção "Conexões da
   aplicação")
 
-**Ações necessárias** *(somente quando esta ADR for aceita — nenhuma executada agora)*:
+**Ações necessárias** *(executadas na aceitação desta ADR, 2026-07-07)*:
 - **Pré-requisito**: a Stega hoje ainda usa o formato **antigo** de variáveis de
   conexão (`POSTGRESQL_URL`/`POSTGRESQL_MIGRATION_URL`, com credenciais embutidas
   na URL — ver `Stega::Config` e `compose.yml` atuais), anterior à Revisão

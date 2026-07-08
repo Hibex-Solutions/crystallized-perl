@@ -20,8 +20,9 @@ contexto ao longo dos guias em vez de reaprender o domínio a cada seção.
 A aplicação de demonstração também precisa ser suficientemente rica para exercitar
 **todos** os componentes do stack sem artifícios. Isso requer: frontend com
 autenticação real, banco relacional com busca indexada, dados semi-estruturados em
-JSONB, fila local de jobs (Minion) e serviço externo de notificações (RabbitMQ em
-processo separado). Uma aplicação CRUD simples não satisfaria esse requisito.
+JSONB, fila local de jobs (Minion) e log de eventos multi-consumidor (PgQue, em
+processo separado, ADR-022). Uma aplicação CRUD simples não satisfaria esse
+requisito.
 
 ## Decisão
 
@@ -67,7 +68,7 @@ agentes e resolver problemas com trilha de auditoria completa.
 | Indexação para busca | Busca em texto completo nos tickets com `tsvector` e índice GIN |
 | Dados semi-estruturados JSONB | Campos personalizados por produto, metadados de comentários, log de eventos |
 | Fila local de jobs (Minion) | Jobs de SLA, relatórios, processamento de webhooks recebidos |
-| Serviço externo de notificações (RabbitMQ) | Worker dedicado para e-mail e Slack desacoplado da aplicação principal |
+| Log de eventos multi-consumidor (PgQue) | Worker dedicado para e-mail e Slack desacoplado da aplicação principal |
 | Integrações externas | Recepção de webhooks do GitHub; envio de webhooks para sistemas externos |
 
 ### Papéis de usuário
@@ -363,8 +364,9 @@ lib/
     │   ├── CheckSlaBreaches.pm          ← Minion: verifica tickets sem resposta no prazo
     │   ├── ProcessWebhookPayload.pm     ← Minion: converte evento GitHub em ticket
     │   └── GenerateActivityReport.pm   ← Minion: relatório semanal por produto
+    ├── Notification.pm                  ← publish(): envia evento via pgque.send() (ADR-022)
     └── Worker/
-        └── NotificationWorker.pm        ← Net::AMQP::RabbitMQ: e-mail e Slack
+        └── NotificationWorker.pm        ← pgque.receive()/ack()/nack(): e-mail e Slack
 ```
 
 ### Fila local de jobs — Minion
@@ -373,11 +375,13 @@ A Stega usa o **Minion** (job queue nativo do Mojolicious) com backend PostgreSQ
 (`Minion::Backend::Pg`) para jobs internos que precisam de persistência e
 reprocessamento, mas não requerem roteamento externo via broker.
 
-O Minion compartilha a mesma instância `Mojo::Pg` da aplicação — sem novo serviço:
+O Minion usa uma instância `Mojo::Pg` própria, para `db-jobs` — nunca a mesma
+instância da aplicação (ADR-023):
 
 ```perl
 # em Stega.pm, dentro de startup()
-$self->plugin('Minion', Pg => $self->pg);
+my $jobs_cfg = $self->config->{postgresql}{jobs};
+$self->plugin('Minion', Pg => Mojo::Pg->new(Stega::Config::pg_dsn(@{$jobs_cfg}{qw(url username password)})));
 
 $self->minion->add_task(send_welcome_notification => \&Stega::Job::SendWelcomeNotification::run);
 $self->minion->add_task(check_sla_breaches        => \&Stega::Job::CheckSlaBreaches::run);
@@ -388,9 +392,9 @@ $self->minion->add_task(generate_activity_report  => \&Stega::Job::GenerateActiv
 | Job Minion | Disparado por | O que faz |
 |------------|--------------|-----------|
 | `send_welcome_notification` | Primeiro login do usuário (callback OIDC) | Envia notificação de boas-vindas; não bloqueia o redirecionamento pós-login |
-| `check_sla_breaches` | Agendamento periódico (worker Minion) | Varre tickets `open` ou `in_progress` sem atualização dentro do prazo do SLA; publica evento `ticket.sla_breached` no RabbitMQ |
+| `check_sla_breaches` | Agendamento periódico (worker Minion) | Varre tickets `open` ou `in_progress` sem atualização dentro do prazo do SLA; publica evento `ticket.sla_breached` via PgQue (`db-events`) |
 | `process_webhook_payload` | `POST /api/v1/webhooks/github` | Converte issue do GitHub em ticket da Stega; processa de forma assíncrona para responder 200 ao GitHub imediatamente |
-| `generate_activity_report` | Agendamento semanal | Agrega métricas por produto (tickets abertos, tempo médio de resolução) e publica no RabbitMQ para envio por e-mail |
+| `generate_activity_report` | Agendamento semanal | Agrega métricas por produto (tickets abertos, tempo médio de resolução) e publica via PgQue (`db-events`) para envio por e-mail |
 
 O worker Minion é executado com:
 
@@ -398,59 +402,68 @@ O worker Minion é executado com:
 carton exec perl -Ilib script/stega minion worker
 ```
 
-### Serviço de notificações — RabbitMQ
+### Serviço de notificações — PgQue
 
 O **NotificationWorker** é um processo **completamente separado** da aplicação web.
-Ele consome mensagens do exchange `stega.notifications` no RabbitMQ e despacha para
-canais externos (e-mail, Slack, webhooks de saída). Usa `Net::AMQP::RabbitMQ`
-(bloqueante, adequado para workers dedicados — conforme ADR-008).
+Ele consome eventos da fila `stega.notifications` no PgQue (PostgreSQL, instância
+`db-events`) e despacha para canais externos (e-mail, Slack, webhooks de saída).
+Usa `pgque.receive()`/`ack()`/`nack()` via `Mojo::Pg` (síncrono, adequado para
+workers dedicados — conforme ADR-022).
 
 ```perl
 # lib/Stega/Worker/NotificationWorker.pm
 package Stega::Worker::NotificationWorker;
-use strict;
-use warnings;
-use feature 'say';
-use Net::AMQP::RabbitMQ;
-use JSON::PP qw(decode_json);
+use v5.42;
+use utf8;
+
+use Stega::Config;
+use Mojo::Pg;
+use Mojo::JSON qw(decode_json);
 
 sub run {
-    my $mq = Net::AMQP::RabbitMQ->new;
-    $mq->connect(
-        $ENV{RABBITMQ_HOST} // 'localhost',
-        {
-            user     => $ENV{RABBITMQ_USER}     // 'stega',
-            password => $ENV{RABBITMQ_PASSWORD} // 'dev_password',
-            vhost    => $ENV{RABBITMQ_VHOST}    // '/',
-            port     => $ENV{RABBITMQ_PORT}     // 5672,
+    my $events_cfg = Stega::Config::load()->{postgresql}{events};
+    my $pg         = Mojo::Pg->new(Stega::Config::pg_dsn(@{$events_cfg}{qw(url username password)}));
+    my $db         = $pg->db;
+
+    $db->query('select pgque.subscribe(?, ?)', 'stega.notifications', 'notification_worker');
+
+    say '[NotificationWorker] Aguardando eventos. Ctrl+C para encerrar.';
+
+    while (1) {
+        # Colunas de pgque.message: msg_id, batch_id, type, payload (texto
+        # JSON, decodificação manual), retry_count, created_at, extra1..4.
+        my $messages = $db->query(
+            'select * from pgque.receive(?, ?, ?)',
+            'stega.notifications', 'notification_worker', 20
+        )->hashes;
+
+        unless (@$messages) {
+            sleep 1;
+            next;
         }
-    );
 
-    $mq->channel_open(1);
-    $mq->exchange_declare(1, 'stega.notifications', { exchange_type => 'topic', durable => 1 });
-    $mq->queue_declare(1, 'stega.notifications.dispatch', { durable => 1 });
-    $mq->queue_bind(1, 'stega.notifications.dispatch', 'stega.notifications', 'ticket.#');
-    $mq->queue_bind(1, 'stega.notifications.dispatch', 'stega.notifications', 'report.#');
-    $mq->consume(1, 'stega.notifications.dispatch');
-
-    say '[NotificationWorker] Aguardando mensagens. Ctrl+C para encerrar.';
-
-    while (my $msg = $mq->recv(0)) {   # 0 = bloqueante
-        eval {
-            my $payload     = decode_json($msg->{body});
-            my $routing_key = $msg->{routing_key} // '';
-            _dispatch($routing_key, $payload);
-            $mq->ack(1, $msg->{delivery_tag});
-        };
-        if ($@) {
-            warn "[NotificationWorker] Erro: $@\n";
-            $mq->reject(1, $msg->{delivery_tag}, 0);
+        for my $msg (@$messages) {
+            eval {
+                _dispatch($msg->{type}, decode_json($msg->{payload}));
+            };
+            if ($@) {
+                warn "[NotificationWorker] Erro: $@\n";
+                # nack() exige um pgque.message completo (10 campos), mas só
+                # lê msg_id — ROW(...) com NULL nos demais evita serializar
+                # um hashref Perl como composite type.
+                $db->query(
+                    'select pgque.nack(?, ROW(?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)::pgque.message, ?::interval, ?)',
+                    $msg->{batch_id}, $msg->{msg_id}, '60 seconds', "$@"
+                );
+            }
         }
+
+        $db->query('select pgque.ack(?)', $messages->[0]{batch_id});
     }
 }
 ```
 
-| Routing key | Evento | Ação do worker |
+| Tipo de evento (`type`) | Evento | Ação do worker |
 |-------------|--------|----------------|
 | `ticket.assigned` | Ticket atribuído a um agente | E-mail ao agente com resumo do ticket |
 | `ticket.status_changed` | Status do ticket mudou | E-mail ao autor com o novo status |
@@ -459,8 +472,12 @@ sub run {
 | `ticket.resolved` | Ticket marcado como resolvido | E-mail ao autor com pesquisa de satisfação (link externo) |
 | `report.weekly_ready` | Relatório semanal pronto (vem do Minion) | E-mail com relatório em anexo para admins do produto |
 
-O worker é executado como um processo independente no Kubernetes (`stega-notification-worker`)
-e como um contêiner separado no Docker Compose do ambiente de desenvolvimento.
+O worker é executado como um processo independente no Kubernetes
+(`stega-notification-worker`) e como um contêiner separado no Docker Compose do
+ambiente de desenvolvimento — junto de um segundo processo novo, o **ticker do
+PgQue** (`stega-pgque-ticker`, `script/pgque_ticker`), que chama `pgque.ticker()`
+em loop apertado para materializar os batches que `receive()` consome (ver
+ADR-022, seção "Tick de rotação").
 
 ### Integrações externas recebidas
 
@@ -482,17 +499,19 @@ Isso garante que o GitHub ou sistema externo não aguarde o processamento comple
 | ADR-004 | Mojolicious + Hypnotoad | Framework principal; `Stega.pm`; frontend server-rendered + API no mesmo processo |
 | ADR-005 | Carton + cpanm | `cpanfile` com todas as dependências fixadas; `carton exec` em todos os comandos |
 | ADR-006 | Moo + Moo::Role | `Stega::Model::Ticket`, `::Comment`, `::Product`, `::User` — lógica de domínio isolada dos controllers |
-| ADR-007 | PostgreSQL 17 | Banco único; 8 migrations; dois usuários (DDL e DML) em produção |
-| ADR-008 | RabbitMQ | Exchange `stega.notifications` (topic, durable); fila `stega.notifications.dispatch`; `NotificationWorker` consome com `Net::AMQP::RabbitMQ`; jobs Minion publicam também via `Net::AMQP::RabbitMQ` (conexão por chamada) |
+| ADR-007 | PostgreSQL 17 | Quatro instâncias por finalidade (ADR-023); migrations em `db-app`; dois usuários (DDL e DML) em produção |
+| ADR-008 | RabbitMQ (histórico, revogado) | Substituído pelo PgQue — ver ADR-022. Mantido aqui só como registro histórico do que a Stega usou entre 2026-06-27 e 2026-07-07 |
 | ADR-009 | Keycloak + JWT | Login OIDC (web); JWT Bearer (API); sincronização de usuário no callback; claim `role` para RBAC |
-| ADR-010 | Kubernetes | Três Deployments: `stega-api`, `stega-minion-worker`, `stega-notification-worker`; InitContainer para migration |
+| ADR-010 | Kubernetes | Quatro Deployments: `stega-api`, `stega-minion-worker`, `stega-notification-worker`, `stega-pgque-ticker`; InitContainer para migration + InitContainer para bootstrap do PgQue |
 | ADR-011 | Test::Mojo + prove + Devel::Cover | Suite de testes cobrindo todas as rotas da API; testes de autenticação com JWT falso |
 | ADR-012 | Estrutura mínima | `.gitignore`, `.gitattributes`, `DEVELOPMENT.md` com variáveis de ambiente explícitas |
-| ADR-013 | Scripts de engenharia | `eng/migrate.pl`, `eng/seed.pl`, `eng/setup.pl`, `eng/worker.pl` |
-| ADR-014 | Ambiente de desenvolvimento | `compose.yml` com PostgreSQL, RabbitMQ, Keycloak, Minion worker e Notification worker |
+| ADR-013 | Scripts de engenharia/execução | `eng/migrate.pl`, `eng/seed.pl`, `eng/setup.pl`, `eng/bootstrap_pgque.pl` (apoio ao dev); `script/worker`, `script/pgque_ticker` (processos da app, revisão 2026-07-07) |
+| ADR-014 | Ambiente de desenvolvimento | `compose.yml` com quatro instâncias PostgreSQL, Keycloak, Minion worker, Notification worker e ticker do PgQue |
 | ADR-015 | OpenAPI v3 | `api/stega.yaml` — contrato completo de todas as rotas `/api/v1/...` |
-| ADR-016 | Mojo::Pg + migrations | Toda persistência relacional; 9 versões em `migrations/N/{up,down}.sql` via `from_dir`; dois usuários PostgreSQL em produção |
+| ADR-016 | Mojo::Pg + migrations | Toda persistência relacional; migrations em `migrations/N/{up,down}.sql` via `from_dir`; dois usuários PostgreSQL em produção |
 | ADR-017 | PostgreSQL JSONB | `tickets.custom_fields`, `comments.metadata`, `events.payload`, `products.settings` — quatro usos distintos de JSONB |
+| ADR-022 | PgQue | Fila `stega.notifications`; `NotificationWorker` consome com `pgque.receive()`/`ack()`/`nack()`; jobs Minion publicam via `Stega::Notification::publish()` (`pgque.send()`); processo `script/pgque_ticker` dedicado |
+| ADR-023 | Topologia de instâncias PostgreSQL | `db-app`/`db-jobs`/`db-events`/`postgres-keycloak` — três instâncias `Mojo::Pg` distintas no mesmo processo Stega (`$app->pg`, backend do Minion, `$app->pg_events`) |
 
 ### Estrutura de arquivos do repositório da Stega
 
@@ -506,7 +525,7 @@ crystallized-perl-stega/
 ├── .env.example
 ├── .gitignore
 ├── .gitattributes
-├── compose.yml                 ← PostgreSQL + RabbitMQ + Keycloak (ADR-014)
+├── compose.yml                 ← 4 instâncias PostgreSQL + Keycloak (ADR-014, ADR-023)
 ├── Dockerfile                  ← multi-stage build: deps → test → production
 │
 ├── api/
@@ -547,6 +566,7 @@ crystallized-perl-stega/
 │       │   ├── GenerateActivityReport.pm
 │       │   ├── ProcessWebhookPayload.pm
 │       │   └── SendWelcomeNotification.pm
+│       ├── Notification.pm         ← publish() via pgque.send() (ADR-022)
 │       └── Worker/
 │           └── NotificationWorker.pm
 │
@@ -582,37 +602,50 @@ crystallized-perl-stega/
 │   ├── 050_ticket_assignment.t
 │   └── 060_business_rules.t
 │
-├── eng/                        ← sem wrapper .ps1 (ADR-013) — mesmo comando em qualquer SO
-│   ├── migrate.pl              ← executa migrations (ADR-016)
+├── eng/                        ← ferramentas de apoio ao dev/implantação (ADR-013)
+│   ├── migrate.pl              ← executa migrations em db-app (ADR-016)
 │   ├── seed.pl                 ← popula banco com dados de exemplo
-│   ├── setup.pl                ← verifica dependências do ambiente (ADR-013)
-│   └── worker.pl               ← inicia NotificationWorker RabbitMQ
+│   ├── setup.pl                ← verifica dependências do ambiente
+│   ├── keycloak_test_users.pl  ← cria usuários de teste via API admin do Keycloak
+│   └── bootstrap_pgque.pl      ← instala pgque.sql em db-events (ADR-022)
 │
-├── script/
-│   └── stega                   ← script principal Mojolicious
+├── script/                     ← processos de execução da aplicação (ADR-013, rev. 2026-07-07)
+│   ├── stega                   ← script principal Mojolicious
+│   ├── worker                  ← inicia NotificationWorker (consumidor PgQue)
+│   └── pgque_ticker            ← tick de rotação do PgQue (ADR-022)
 │
-└── docker/
-    └── postgres-init/
-        └── 01-keycloak-db.sql  ← cria database keycloak no primeiro boot
+└── vendor/
+    └── pgque/
+        ├── pgque.sql           ← vendorizado, v0.2.0 (ADR-022)
+        └── LICENSE             ← Apache-2.0
 ```
 
-### Três processos em produção
+### Quatro processos em produção
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │ stega-api (Deployment Kubernetes)                                 │
 │  └─ Hypnotoad (pre-fork) — serve web + API                       │
-│     InitContainer: carton exec perl eng/migrate.pl               │
+│     InitContainer: carton exec perl eng/migrate.pl (db-app)      │
+│     InitContainer: carton exec perl eng/bootstrap_pgque.pl       │
+│                     (db-events)                                  │
 ├──────────────────────────────────────────────────────────────────┤
 │ stega-minion-worker (Deployment Kubernetes)                       │
 │  └─ carton exec perl -Ilib script/stega minion worker            │
+│     Backend: db-jobs (Mojo::Pg próprio, não $app->pg)             │
 │     Processa: send_welcome_notification, check_sla_breaches,     │
 │               process_webhook_payload, generate_activity_report  │
 ├──────────────────────────────────────────────────────────────────┤
 │ stega-notification-worker (Deployment Kubernetes)                 │
-│  └─ carton exec perl eng/worker.pl                               │
-│     Consome: stega.notifications (RabbitMQ)                      │
+│  └─ carton exec perl script/worker                               │
+│     Consome: stega.notifications (PgQue, db-events)               │
 │     Envia: e-mail, Slack, webhooks de saída                      │
+├──────────────────────────────────────────────────────────────────┤
+│ stega-pgque-ticker (Deployment Kubernetes, replicas: 1 obrigatório)│
+│  └─ carton exec perl script/pgque_ticker                         │
+│     pgque.ticker() em loop apertado (~250ms) + maint()/           │
+│     maint_retry_events() (~30s) + maint_rotate_tables_step2()     │
+│     (~10s) — ver ADR-022, "Tick de rotação"                      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -629,7 +662,7 @@ repositório `crystallized-perl-stega` e focar no ponto específico sendo ensina
 
 Referências: [Mojolicious](../references/mojolicious.md),
 [PostgreSQL](../references/postgresql.md),
-[RabbitMQ](../references/rabbitmq.md),
+[PgQue](../references/pgque.md),
 [Keycloak](../references/keycloak.md),
 [The Twelve-Factor App](../references/twelve-factor-app.md)
 
@@ -649,10 +682,10 @@ Referências: [Mojolicious](../references/mojolicious.md),
 **Positivo**:
 - Um único domínio (`Ticket`, `Comment`, `Product`, `User`) em todos os guias — leitores acumulam contexto em vez de reaprender
 - Todos os 14 componentes do stack são exercitados com casos de uso reais, não artificiais
-- A separação Minion (local) × RabbitMQ (externo) demonstra concretamente o critério de escolha entre os dois — o guia de ADR-008 ganha um exemplo de uso complementar ao invés de alternativo
+- A separação Minion (jobs internos) × PgQue (eventos multi-consumidor) demonstra concretamente o critério de escolha entre os dois — o guia da ADR-022 ganha um exemplo de uso complementar ao invés de alternativo
 - A busca por `tsvector` demonstra que PostgreSQL resolve esse requisito sem Elasticsearch
 - Repositório separado permite executar e explorar a aplicação independentemente
-- Três processos distintos em produção demonstram o padrão real de implantação cloud-native
+- Quatro processos distintos em produção demonstram o padrão real de implantação cloud-native, incluindo um processo de manutenção de infraestrutura (ticker) que não serve tráfego nem consome fila de jobs
 
 **Negativo**:
 - Manutenção do repositório `crystallized-perl-stega` é trabalho adicional permanente
@@ -661,10 +694,12 @@ Referências: [Mojolicious](../references/mojolicious.md),
 
 **Ações realizadas** *(todas concluídas — repositório em produção)*:
 - Repositório `hibex-solutions/crystallized-perl-stega` criado com a estrutura definida nesta ADR
-- 8 migrations implementadas (001–007 + 008 que relaxa UNIQUE em `email`)
+- Migrations implementadas (ver `migrations/` no repositório da Stega para a lista completa e atual)
 - `api/stega.yaml` criado com o contrato OpenAPI v3 completo das rotas `/api/v1/...`
-- `compose.yml` criado com PostgreSQL 17, RabbitMQ 4.3, Keycloak 26.6 e perfil `full` para a aplicação
-- Arquivo de referência `docs/references/minion.md` criado e referenciando esta ADR e ADR-008
+- `compose.yml` criado com quatro instâncias PostgreSQL 17 (`postgres-app`,
+  `postgres-jobs`, `postgres-events`, `postgres-keycloak`), Keycloak 26.6 e
+  perfil `full` para a aplicação (2026-07-07, ADR-022/ADR-023)
+- Arquivo de referência `docs/references/minion.md` criado e referenciando esta ADR e ADR-008 (histórico); `docs/references/pgque.md` referenciando ADR-022
 
 **Ações em andamento**:
 - Guias de usuário em `docs/guides/` usando a Stega como contexto (próxima fase)
