@@ -55,22 +55,36 @@ prefere rodar Perl diretamente no sistema.
 
 O perlbrew compila o Perl a partir do código-fonte. Em distribuições Linux sem
 ambiente de desenvolvimento instalado, os pacotes de compilação precisam ser
-instalados primeiro:
+instalados primeiro. Aproveite para instalar também os cabeçalhos do cliente
+PostgreSQL (`libpq`) — não são necessários para compilar o Perl em si, mas o
+`DBD::Pg` (dependência transitiva do `Mojo::Pg`) precisa deles para compilar
+mais adiante, no passo "Instalar dependências"; sem isso `cpanm`/`carton install`
+reporta falha só para esse módulo sem abortar a instalação dos demais — fácil
+de não notar no meio de uma saída longa — e o sintoma só aparece depois, como
+`Can't locate Mojo/Pg.pm in @INC` ao rodar qualquer script que usa banco:
 
 ```bash
 # Ubuntu / Debian
 sudo apt-get update
-sudo apt-get install -y build-essential libssl-dev zlib1g-dev
+sudo apt-get install -y build-essential libssl-dev zlib1g-dev libpq-dev
 
 # Fedora / RHEL / CentOS
-sudo dnf install -y gcc make openssl-devel zlib-devel
+sudo dnf install -y gcc make openssl-devel zlib-devel postgresql-devel
 ```
 
-No macOS as ferramentas de linha de comando do Xcode já suprem esse requisito:
+No macOS as ferramentas de linha de comando do Xcode suprem o compilador, mas
+não trazem `libpq` — instale via Homebrew:
 
 ```bash
 xcode-select --install
+brew install libpq
+echo 'export PATH="'$(brew --prefix libpq)'/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
+
+`libpq` é "keg-only" no Homebrew (não é vinculado a `/usr/local`/`/opt/homebrew`
+automaticamente) — sem adicionar seu `bin/` ao `PATH`, `pg_config` não é
+encontrado e o mesmo erro de `carton install` acontece.
 
 ### 2. Instalar o perlbrew
 
@@ -289,7 +303,37 @@ KEYCLOAK_CLIENT_ID=stega-web
 TEST_JWT_SECRET=test_secret_apenas_para_desenvolvimento
 ```
 
-### 3. Iniciar os serviços de apoio
+### 3. Instalar dependências (caminhos A e B apenas)
+
+```bash
+carton install
+```
+
+O Carton lê o `cpanfile.snapshot` e instala as versões exatas de todos os módulos
+no diretório `local/`. Módulos XS como `DBD::Pg` precisam de compilador C —
+disponível por padrão no Strawberry Perl (Windows) e nas imagens Perl do Docker;
+no Linux/macOS, é o pacote `libpq-dev`/`postgresql-devel`/`libpq` do passo 1 acima
+— sem ele, `carton install` falha só para esse módulo (fácil de não notar no meio
+da saída) e o sintoma só aparece depois, como `Can't locate Mojo/Pg.pm in @INC` ao
+rodar qualquer script que usa banco. Nenhum módulo de fila exige compilador C
+(PgQue é SQL puro, consumido via `Mojo::Pg` — ADR-022).
+
+> **Exceção que continua existindo, sem relação com compilador C**: o worker do
+> Minion (`carton exec perl script/stega minion worker`, Passo 4 do
+> [Guia 8](/guides/filas-com-pgque-e-minion)) não roda em Windows nativo —
+> `Minion.pm::worker()` recusa operar em qualquer Perl com fork emulado via
+> ithreads (`$Config{d_pseudofork}`, o caso do Strawberry/berrybrew), com o erro
+> `Minion workers do not support fork emulation`. É uma restrição do próprio
+> Minion (ADR-008), não da migração para PgQue desta ADR-022, e não tem solução
+> no lado da aplicação. Use o Caminho C (Docker Compose) ou WSL2 só para esse
+> processo — os demais (`daemon`, `script/worker`, `script/pgque_ticker`,
+> scripts de `eng/`) rodam nativamente sem exceção. Ver "Revisão 2026-07-08" na
+> [ADR-014](/adrs/ADR-014-ambiente-de-desenvolvimento-local). Resolver essa
+> exceção de vez (não só contorná-la) é pendência de pesquisa aberta na
+> [ADR-024](/adrs/ADR-024-jobs-assincronos-multiplataforma) — ainda `Proposta`,
+> sem decisão.
+
+### 4. Iniciar os serviços de apoio
 
 **Caminho A ou B (Perl nativo):**
 
@@ -298,6 +342,8 @@ TEST_JWT_SECRET=test_secret_apenas_para_desenvolvimento
 docker compose up -d postgres-app postgres-jobs postgres-events postgres-keycloak keycloak
 
 # Instala o PgQue em db-events (idempotente — ver Guia 8/ADR-022)
+# Requer o passo 3 acima já concluído (carton exec só encontra Mojo::Pg
+# depois de "carton install")
 carton exec perl eng/bootstrap_pgque.pl
 # Windows/PowerShell: carton exec perl eng/bootstrap_pgque.pl | Out-Host
 ```
@@ -306,6 +352,7 @@ carton exec perl eng/bootstrap_pgque.pl
 
 ```bash
 # Sobe tudo: serviços de apoio + aplicação + workers (perfil "full")
+# Não depende do passo 3 — tudo roda dentro dos containers
 docker compose --profile full up
 ```
 
@@ -322,33 +369,6 @@ docker compose ps
 # stega-postgres-keycloak Up (healthy)
 # stega-keycloak          Up (healthy)
 ```
-
-### 4. Instalar dependências (caminhos A e B apenas)
-
-```bash
-carton install
-```
-
-O Carton lê o `cpanfile.snapshot` e instala as versões exatas de todos os módulos
-no diretório `local/`. Módulos XS como `DBD::Pg` precisam de compilador C —
-disponível por padrão no Strawberry Perl (Windows) e nas imagens Perl do Docker.
-Nenhum módulo de fila exige compilador C (PgQue é SQL puro, consumido via
-`Mojo::Pg` — ADR-022).
-
-> **Exceção que continua existindo, sem relação com compilador C**: o worker do
-> Minion (`carton exec perl script/stega minion worker`, Passo 4 do
-> [Guia 8](/guides/filas-com-pgque-e-minion)) não roda em Windows nativo —
-> `Minion.pm::worker()` recusa operar em qualquer Perl com fork emulado via
-> ithreads (`$Config{d_pseudofork}`, o caso do Strawberry/berrybrew), com o erro
-> `Minion workers do not support fork emulation`. É uma restrição do próprio
-> Minion (ADR-008), não da migração para PgQue desta ADR-022, e não tem solução
-> no lado da aplicação. Use o Caminho C (Docker Compose) ou WSL2 só para esse
-> processo — os demais (`daemon`, `script/worker`, `script/pgque_ticker`,
-> scripts de `eng/`) rodam nativamente sem exceção. Ver "Revisão 2026-07-08" na
-> [ADR-014](/adrs/ADR-014-ambiente-de-desenvolvimento-local). Resolver essa
-> exceção de vez (não só contorná-la) é pendência de pesquisa aberta na
-> [ADR-024](/adrs/ADR-024-jobs-assincronos-multiplataforma) — ainda `Proposta`,
-> sem decisão.
 
 ### 5. Aplicar as migrations do banco
 
@@ -455,7 +475,8 @@ docker compose down -v
 | Scripts falham com `\r not found` | CRLF no Windows | `git config --global core.autocrlf false` e re-clone |
 | `I can't find make or gmake` | Ferramentas de compilação ausentes no Linux | `sudo apt-get install -y build-essential` (Ubuntu/Debian) |
 | `perlbrew install` falha em testes | Suite de testes do interpretador falha por fatores do ambiente | Use `perlbrew --notest install perl-5.42.2` |
-| `DBD::Pg` falha ao instalar | Compilador C ausente | Use berrybrew (já inclui MinGW) ou Docker Compose |
+| `DBD::Pg` falha ao instalar (Windows) | Compilador C ausente | Use berrybrew (já inclui MinGW) ou Docker Compose |
+| `Can't locate Mojo/Pg.pm in @INC` (Linux/macOS) | `carton install` (passo 3) rodou antes de instalar `libpq-dev`/`postgresql-devel`/`libpq` (passo 1) — `DBD::Pg` reporta falha só para esse módulo sem abortar o resto da instalação, fácil de não notar no meio de uma saída longa | Instale o pacote do passo 1 e rode `carton install` de novo — reinstala só o que faltou, não precisa recomeçar do zero |
 | Keycloak lento para iniciar | Primeira inicialização | Normal — aguarde ~45 segundos |
 | `berrybrew available` não lista a versão desejada | Cache local de versões desatualizado | Rode `berrybrew fetch` antes de `berrybrew available` |
 | `cpanm Carton` falha ao construir `Parse::PMFile` (ou outra dependência transitiva) | Suite de testes de uma dependência do Carton falha no ambiente, sem que o módulo deixe de funcionar | Use `cpanm --notest Carton` — confirmado funcional no Windows/berrybrew |

@@ -69,7 +69,7 @@ Ver [`docs/references/`](docs/references/) para as 38 fontes completas.
 | Banco de dados | PostgreSQL 17 | [ADR-007](docs/adrs/ADR-007-banco-de-dados-relacional-postgresql.md) |
 | Acesso relacional | Mojo::Pg + Mojo::Pg::Migrations | [ADR-016](docs/adrs/ADR-016-acesso-a-dados-relacional-mojo-pg.md) |
 | Dados documentais | PostgreSQL JSONB | [ADR-017](docs/adrs/ADR-017-acesso-a-dados-documentos-jsonb.md) |
-| Filas (jobs internos) | Minion + Minion::Backend::Pg | [ADR-008](docs/adrs/ADR-008-message-broker-rabbitmq.md) |
+| Filas (jobs internos) | Minion + Minion::Backend::Pg | [ADR-023](docs/adrs/ADR-023-topologia-de-instancias-postgresql.md), [ADR-024](docs/adrs/ADR-024-jobs-assincronos-multiplataforma.md) (pendência) |
 | Filas (eventos multi-consumidor) | PgQue, em PostgreSQL | [ADR-022](docs/adrs/ADR-022-filas-em-postgresql.md) |
 | Topologia PostgreSQL | 4 instâncias por finalidade | [ADR-023](docs/adrs/ADR-023-topologia-de-instancias-postgresql.md) |
 | Autenticação | Keycloak + JWT / Crypt::JWT | [ADR-009](docs/adrs/ADR-009-autenticacao-keycloak-jwt.md) |
