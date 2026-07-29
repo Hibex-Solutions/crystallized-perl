@@ -370,7 +370,7 @@ Follow this sequence when resuming work on this project:
 
 1. Re-read this file in full.
 2. Check `docs/adrs/` to understand what has already been decided. Existem
-   ADR-000 a ADR-024 cobrindo todo o stack. ADR-019 define o cabeçalho padrão
+   ADR-000 a ADR-025 cobrindo todo o stack. ADR-019 define o cabeçalho padrão
    de código Perl; ADR-020 define o padrão Domain + Repository (validação de negócio
    com estado, complementar à Policy da ADR-011); ADR-021 define `Stega::Config`,
    módulo único de leitura de variáveis de ambiente (usado tanto pela app via
@@ -410,6 +410,23 @@ Follow this sequence when resuming work on this project:
    documenta só o problema e um inventário de uso real do Minion na Stega,
    sem decisão — ver a ADR para as perguntas em aberto, entre elas se o PgQue
    sozinho cobriria os cenários de job atuais).
+   **Em 2026-07-29, a pergunta 3 da ADR-024 (agendamento periódico) foi
+   respondida pela nova ADR-025** (`Aceita`) — processo dedicado
+   (`script/report_scheduler` na Stega), mesmo padrão já aceito para o tick do
+   PgQue (`script/pgque_ticker`, ADR-022): só enfileira jobs Minion via
+   `$app->minion->enqueue`, nunca processa, então não esbarra na limitação de
+   `fork()` do Minion no Windows (essa parte da ADR-024, perguntas 1/2/4/5,
+   continua em aberto — só a 3 foi resolvida, por isso a ADR-024 recebeu uma
+   nota de revisão em vez de mudar de status). Implementado na Stega no mesmo
+   dia: `Stega::Job::GenerateActivityReport` passou a ser enfileirado
+   periodicamente (antes registrado como task do Minion mas nunca disparado);
+   a entrega do relatório (`report.weekly_ready`, antes um `warn` TODO no
+   `NotificationWorker`) ganhou uma abstração própria (`Stega::Delivery`,
+   `Moo::Role`) com uma primeira implementação concreta que só loga a entrega
+   simulada (`Stega::Delivery::Log`) — desenhada para ser reaproveitada quando
+   `Stega::Job::CheckSlaBreaches` for ligado ao mesmo `script/report_scheduler`
+   (ainda pendente, só falta uma entrada na lista de agendamento — ver
+   `TODO.txt` da Stega).
 3. Check `docs/references/` to understand what sources are in play (38 fontes).
 4. Ask the user what they want to work on before creating files.
 5. If the user provides new reference URLs, create reference files first,
@@ -494,6 +511,7 @@ Todas as questões de fundação estão respondidas. As decisões estão registr
 | Acesso a dados relacional | Mojo::Pg + Mojo::Pg::Migrations | ADR-016 |
 | Acesso a dados documentais | PostgreSQL JSONB via Mojo::Pg | ADR-017 |
 | Aplicação de demonstração | Stega (hibex-solutions/crystallized-perl-stega) | ADR-018 |
+| Agendamento de jobs periódicos internos | Script dedicado (`script/report_scheduler`), enfileira via Minion, mesmo padrão do `script/pgque_ticker` | ADR-025 |
 | Referências externas | 38 fontes em `docs/references/` | — |
 
 **Próximos passos**: escrever os guias de usuário em `docs/guides/`, usando a Stega

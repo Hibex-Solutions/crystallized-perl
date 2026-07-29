@@ -41,3 +41,7 @@ enquanto o PgQue conecta a Stega com serviços externos de notificação
 - [ADR-024](../adrs/ADR-024-jobs-assincronos-multiplataforma.md) — `Minion.pm`
   não roda nativamente no Windows (`fork()` emulado via ithreads); ADR `Proposta`,
   pendência de pesquisa sobre se o PgQue pode cobrir os cenários de job atuais
+- [ADR-025](../adrs/ADR-025-agendamento-periodico-de-jobs-internos.md) — Minion
+  não tem agendador recorrente embutido (só `delay`, para uma execução única);
+  motiva o processo dedicado (`script/report_scheduler`) que enfileira jobs
+  periodicamente

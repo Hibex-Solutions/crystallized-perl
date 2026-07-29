@@ -39,3 +39,7 @@ armadilhas está em
   RabbitMQ pelo PgQue como mecanismo de filas em PostgreSQL (aceita em 2026-07-07)
 - [ADR-018](../adrs/ADR-018-aplicacao-de-demonstracao.md) — a Stega usa o PgQue
   como fila de eventos multi-consumidor (`NotificationWorker`)
+- [ADR-025](../adrs/ADR-025-agendamento-periodico-de-jobs-internos.md) — o
+  próprio tick do PgQue já depende de "`pg_cron` ou um agendador externo"
+  (nota acima); a ADR-025 aplica o mesmo raciocínio ao agendamento de jobs do
+  Minion, com um processo dedicado equivalente ao `script/pgque_ticker`

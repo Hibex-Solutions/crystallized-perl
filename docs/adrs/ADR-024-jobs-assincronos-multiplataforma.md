@@ -84,11 +84,30 @@ Observações consolidadas:
   atual, não uma conclusão técnica verificada — ver a primeira pergunta em
   Justificativa.
 
+**Revisão 2026-07-29 — pergunta 3 respondida pela ADR-025**: a pergunta 3 desta
+ADR ("falta um mecanismo de agendamento periódico... resolver isso faz parte
+do escopo desta ADR ou é um problema separado?") foi respondida — é um
+problema separado, tratado isoladamente na
+[ADR-025](ADR-025-agendamento-periodico-de-jobs-internos.md) (`Aceita`): um
+processo dedicado (`script/report_scheduler`), mesmo padrão do
+`script/pgque_ticker`, só enfileira jobs Minion (sem `fork()`, portanto sem a
+limitação de Windows descrita nesta ADR). Como consequência,
+`generate_activity_report` já é disparado periodicamente na Stega — só
+`check_sla_breaches` continua sem agendamento (ver `TODO.txt` da Stega). O
+inventário de uso real abaixo (levantado em 2026-07-08) **não foi reescrito** —
+é um retrato histórico do estado da época; a coluna "Disparado por" de
+`generate_activity_report` está desatualizada por esta mesma razão. As
+perguntas 1, 2, 4 e 5 (sobre `fork()`/Windows e a possível consolidação
+Minion↔PgQue) continuam sem resposta — o status desta ADR permanece `Proposta`
+por causa delas.
+
 ## Decisão
 
-**Nenhuma decisão foi tomada.** O propósito desta ADR, por ora, é só registrar
-o problema, o inventário de uso real do Minion (acima) e as perguntas em
-aberto (abaixo) que uma pesquisa futura precisa responder.
+**Nenhuma decisão foi tomada nesta ADR** sobre as perguntas 1, 2, 4 e 5. O
+propósito dela, por ora, é só registrar o problema, o inventário de uso real
+do Minion (abaixo) e essas perguntas em aberto que uma pesquisa futura precisa
+responder. A pergunta 3 foi respondida separadamente — ver a revisão acima e a
+ADR-025.
 
 ## Justificativa
 
@@ -110,11 +129,14 @@ abaixo colocam em questão.
 2. O retry com `pgque.nack(batch_id, msg, retry_after, reason)` cobre o que o
    `attempts`/backoff automático do Minion dá (mesmo que nenhum job use isso
    hoje)?
-3. Falta um mecanismo de agendamento periódico (cron) tanto no Minion quanto
+3. ~~Falta um mecanismo de agendamento periódico (cron) tanto no Minion quanto
    no PgQue — resolver isso faz parte do escopo desta ADR (já que
    `check_sla_breaches`/`generate_activity_report` precisam disso) ou é um
    problema separado, a registrar em outro lugar? `pg_cron` é uma opção ainda
-   não avaliada.
+   não avaliada.~~ **Respondida — ver "Revisão 2026-07-29" acima e a
+   [ADR-025](ADR-025-agendamento-periodico-de-jobs-internos.md):** é um
+   problema separado, resolvido com um processo dedicado que só enfileira
+   (sem depender de `fork()`).
 4. Existe equivalente operacional ao `minion job`/`Minion::Admin` só com SQL
    sobre PgQue (`get_queue_info`/`get_consumer_info` já existem, mas cobrem
    menos que a CLI/UI do Minion), ou isso é uma perda real de ergonomia
@@ -140,21 +162,30 @@ partida para a pesquisa futura, não um veredito.
 | Manter Minion + PgQue, resolver só o `fork()` no Windows (worker loop sem fork, ou fix upstream) | Não avaliada — viabilidade depende de quanto do `Minion::Backend::Pg` dá para reaproveitar sem o worker padrão do Minion |
 | Consolidar tudo em PgQue puro, eliminando o Minion e `db-jobs` | Não avaliada — depende das perguntas 1, 2 e 4 da Justificativa |
 | PostgreSQL puro sem PgQue nem Minion (`SKIP LOCKED` + `LISTEN`/`NOTIFY` + tabela própria) | A ADR-022 já rejeitou essa rota para eventos multi-consumidor ("Opção C" do estudo anexo), mas jobs internos são um caso de uso mais simples — pode caber aqui mesmo tendo sido rejeitada lá |
-| `pg_cron` para o agendamento periódico que falta hoje | Não avaliada |
+| `pg_cron` para o agendamento periódico que falta hoje | Avaliada e rejeitada pela ADR-025 (2026-07-29) — exigiria extensão customizada na imagem Postgres de `db-jobs`, contra a ADR-022. A ADR-025 decidiu um processo dedicado (`script/report_scheduler`) no lugar, sem consolidar Minion/PgQue |
 | Status quo — Docker/WSL2 obrigatório só para o worker Minion | É o comportamento atual; não atende ao objetivo de paridade nativa da ADR-014, e é exatamente o motivo desta ADR existir |
 
 ## Consequências
 
-Nenhuma — esta ADR, enquanto `Proposta`, não altera nada do stack em vigor.
+Quanto às perguntas 1, 2, 4 e 5 (ainda sem resposta): nenhuma — esta ADR,
+enquanto `Proposta` para essas perguntas, não altera nada do stack em vigor.
 ADR-008 (histórica), ADR-022 e ADR-023 permanecem exatamente como estão. O
 paliativo atual (guardas `skip_all` nos testes que dependem de
-`perform_jobs`, avisos em documentação) continua sendo a solução até que esta
-pendência seja resolvida.
+`perform_jobs`, avisos em documentação) continua sendo a solução até que essa
+parte da pendência seja resolvida.
 
-**Ações necessárias**: nenhuma no código hoje. Quando esta pesquisa avançar, a
-ADR-024 deve ser revisada com uma `## Decisão` de verdade (ou substituída por
-uma ADR nova) — e, nesse momento, todo lugar que hoje referencia esta ADR como
-"pendência" precisa ser atualizado para refletir a decisão final:
+Quanto à pergunta 3 (respondida pela ADR-025): `generate_activity_report` já
+roda periodicamente na Stega via `script/report_scheduler`; `check_sla_breaches`
+segue pendente só por falta de uma entrada equivalente na lista de
+agendamento desse mesmo script (ver `TODO.txt` da Stega), não por falta de
+mecanismo.
+
+**Ações necessárias**: nenhuma no código hoje relacionada às perguntas 1/2/4/5.
+Quando essa parte da pesquisa avançar, a ADR-024 deve ser revisada com uma
+`## Decisão` de verdade para essas perguntas (ou substituída por uma ADR nova)
+— e, nesse momento, todo lugar que hoje referencia esta ADR como "pendência"
+do problema de `fork()`/Windows precisa ser atualizado para refletir a decisão
+final:
 
 - [ADR-014](ADR-014-ambiente-de-desenvolvimento-local.md), seção Consequências/Negativo (Revisão 2026-07-08)
 - [ADR-022](ADR-022-filas-em-postgresql.md), Revisão 2026-07-08 e bullet de Consequências/Positivo
