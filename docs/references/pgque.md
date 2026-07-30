@@ -19,6 +19,15 @@ para o "tick" automático de rotação, `pg_cron` (ou um agendador externo chama
 `pgque.maint_rotate_tables_step2()`, que não está embutida em `pgque.maint()`;
 `pgque.ticker_loop()` é de uso interno do `pg_cron`, ver ADR-022).
 
+Além da API normal de consumo (um cursor lógico único por nome de consumidor —
+réplicas concorrentes do mesmo nome duplicam o lote, não dividem), o PgQue 0.2
+também expõe uma API de **consumidores cooperativos**
+(`subscribe_subconsumer`/`register_subconsumer`, `receive_coop`, `next_batch`
+de 4 argumentos), que permite múltiplas réplicas ("subconsumers") sob o mesmo
+grupo lógico dividirem lotes de eventos entre si de verdade, com takeover
+automático do lote de uma réplica travada via `dead_interval`. O próprio autor
+marca essa API como "Experimental in PgQue 0.2" — ver ADR-026.
+
 Mecanismo adotado na [ADR-022](../adrs/ADR-022-filas-em-postgresql.md) (aceita em
 2026-07-07) para substituir o RabbitMQ ([ADR-008](../adrs/ADR-008-message-broker-rabbitmq.md),
 histórico) no papel de log de eventos multi-consumidor (fan-out) do stack — eliminando a
@@ -43,3 +52,6 @@ armadilhas está em
   próprio tick do PgQue já depende de "`pg_cron` ou um agendador externo"
   (nota acima); a ADR-025 aplica o mesmo raciocínio ao agendamento de jobs do
   Minion, com um processo dedicado equivalente ao `script/pgque_ticker`
+- [ADR-026](../adrs/ADR-026-consumidores-cooperativos-pgque.md) — usa a API
+  de consumidores cooperativos (nota acima) para dividir trabalho de verdade
+  entre múltiplas réplicas do `Stega::Worker::SlaBreachWorker`

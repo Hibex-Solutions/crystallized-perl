@@ -101,13 +101,30 @@ perguntas 1, 2, 4 e 5 (sobre `fork()`/Windows e a possível consolidação
 Minion↔PgQue) continuam sem resposta — o status desta ADR permanece `Proposta`
 por causa delas.
 
+**Revisão 2026-07-30 — pergunta 1 respondida pela ADR-026**: a pergunta 1
+desta ADR ("`pgque.receive` suporta múltiplos workers concorrentes competindo
+pelo mesmo nome de consumidor, ou cada consumidor nomeado é necessariamente um
+único leitor lógico?") foi respondida ao implementar o disparo de
+`check_sla_breaches` — ver
+[ADR-026](ADR-026-consumidores-cooperativos-pgque.md) (`Aceita`): a API
+*normal* do PgQue (`subscribe`/`receive`, a mesma usada pelo
+`NotificationWorker`) não suporta isso — cada consumidor nomeado é um único
+leitor lógico, réplicas concorrentes duplicariam o lote, não dividiriam. Mas
+existe uma *segunda* API, "consumidores cooperativos"
+(`subscribe_subconsumer`/`receive_coop`, com takeover de réplica travada),
+marcada pelo próprio autor do PgQue como "Experimental in PgQue 0.2", que
+resolve exatamente isso — usada no novo `Stega::Worker::SlaBreachWorker`
+(`script/sla_breach_worker`, múltiplas réplicas reais via
+`docker compose up --scale`). As perguntas 2, 4 e 5 continuam sem resposta —
+o status desta ADR permanece `Proposta` por causa delas.
+
 ## Decisão
 
-**Nenhuma decisão foi tomada nesta ADR** sobre as perguntas 1, 2, 4 e 5. O
+**Nenhuma decisão foi tomada nesta ADR** sobre as perguntas 2, 4 e 5. O
 propósito dela, por ora, é só registrar o problema, o inventário de uso real
 do Minion (abaixo) e essas perguntas em aberto que uma pesquisa futura precisa
-responder. A pergunta 3 foi respondida separadamente — ver a revisão acima e a
-ADR-025.
+responder. As perguntas 1 e 3 foram respondidas separadamente — ver as
+revisões acima e as ADR-025/ADR-026.
 
 ## Justificativa
 
@@ -119,13 +136,17 @@ abaixo colocam em questão.
 
 ### Perguntas técnicas em aberto
 
-1. **`pgque.receive(queue, consumer, n)` suporta múltiplos workers
-   concorrentes competindo pelo mesmo nome de consumidor** (semântica de fila
-   de trabalho, análoga ao Minion), ou cada consumidor nomeado é
+1. ~~`pgque.receive(queue, consumer, n)` suporta múltiplos workers
+   concorrentes competindo pelo mesmo nome de consumidor~~ (semântica de fila
+   de trabalho, análoga ao Minion), ~~ou cada consumidor nomeado é
    necessariamente um único leitor lógico? O PgQue já usa `SKIP LOCKED`
    internamente (confirmado no código-fonte durante a migração da ADR-022) —
    precisa verificar se isso se estende a réplicas concorrentes do mesmo
-   consumidor, ou só a consumidores diferentes lendo em paralelo.
+   consumidor, ou só a consumidores diferentes lendo em paralelo.~~
+   **Respondida — ver "Revisão 2026-07-30" acima e a
+   [ADR-026](ADR-026-consumidores-cooperativos-pgque.md):** a API normal não
+   suporta (cada consumidor nomeado é um único leitor lógico), mas uma
+   segunda API experimental do PgQue (consumidores cooperativos) resolve.
 2. O retry com `pgque.nack(batch_id, msg, retry_after, reason)` cobre o que o
    `attempts`/backoff automático do Minion dá (mesmo que nenhum job use isso
    hoje)?
@@ -160,25 +181,29 @@ partida para a pesquisa futura, não um veredito.
 | Direção candidata | Situação |
 |--------------------|----------|
 | Manter Minion + PgQue, resolver só o `fork()` no Windows (worker loop sem fork, ou fix upstream) | Não avaliada — viabilidade depende de quanto do `Minion::Backend::Pg` dá para reaproveitar sem o worker padrão do Minion |
-| Consolidar tudo em PgQue puro, eliminando o Minion e `db-jobs` | Não avaliada — depende das perguntas 1, 2 e 4 da Justificativa |
+| Consolidar tudo em PgQue puro, eliminando o Minion e `db-jobs` | Pergunta 1 respondida pela ADR-026 (existe API cooperativa para trabalho dividido, mas "Experimental in PgQue 0.2") — ainda não avaliada como decisão de consolidação; depende também das perguntas 2 e 4 da Justificativa |
 | PostgreSQL puro sem PgQue nem Minion (`SKIP LOCKED` + `LISTEN`/`NOTIFY` + tabela própria) | A ADR-022 já rejeitou essa rota para eventos multi-consumidor ("Opção C" do estudo anexo), mas jobs internos são um caso de uso mais simples — pode caber aqui mesmo tendo sido rejeitada lá |
 | `pg_cron` para o agendamento periódico que falta hoje | Avaliada e rejeitada pela ADR-025 (2026-07-29) — exigiria extensão customizada na imagem Postgres de `db-jobs`, contra a ADR-022. A ADR-025 decidiu um processo dedicado (`script/report_scheduler`) no lugar, sem consolidar Minion/PgQue |
 | Status quo — Docker/WSL2 obrigatório só para o worker Minion | É o comportamento atual; não atende ao objetivo de paridade nativa da ADR-014, e é exatamente o motivo desta ADR existir |
 
 ## Consequências
 
-Quanto às perguntas 1, 2, 4 e 5 (ainda sem resposta): nenhuma — esta ADR,
+Quanto às perguntas 2, 4 e 5 (ainda sem resposta): nenhuma — esta ADR,
 enquanto `Proposta` para essas perguntas, não altera nada do stack em vigor.
 ADR-008 (histórica), ADR-022 e ADR-023 permanecem exatamente como estão. O
 paliativo atual (guardas `skip_all` nos testes que dependem de
 `perform_jobs`, avisos em documentação) continua sendo a solução até que essa
 parte da pendência seja resolvida.
 
-Quanto à pergunta 3 (respondida pela ADR-025): `generate_activity_report` já
-roda periodicamente na Stega via `script/report_scheduler`; `check_sla_breaches`
-segue pendente só por falta de uma entrada equivalente na lista de
-agendamento desse mesmo script (ver `TODO.txt` da Stega), não por falta de
-mecanismo.
+Quanto à pergunta 3 (respondida pela ADR-025): `generate_activity_report` e
+`check_sla_breaches` já rodam periodicamente na Stega via
+`script/report_scheduler` — nenhum dos dois jobs do inventário original
+segue sem agendamento.
+
+Quanto à pergunta 1 (respondida pela ADR-026): `check_sla_breaches` já tem
+entrega real via `Stega::Worker::SlaBreachWorker` (`script/sla_breach_worker`),
+usando a API cooperativa experimental do PgQue para dividir o trabalho entre
+múltiplas réplicas de verdade (`docker compose up --scale sla-breach-worker=N`).
 
 **Ações necessárias**: nenhuma no código hoje relacionada às perguntas 1/2/4/5.
 Quando essa parte da pesquisa avançar, a ADR-024 deve ser revisada com uma

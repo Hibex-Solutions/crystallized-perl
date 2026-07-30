@@ -370,7 +370,7 @@ Follow this sequence when resuming work on this project:
 
 1. Re-read this file in full.
 2. Check `docs/adrs/` to understand what has already been decided. Existem
-   ADR-000 a ADR-025 cobrindo todo o stack. ADR-019 define o cabeçalho padrão
+   ADR-000 a ADR-026 cobrindo todo o stack. ADR-019 define o cabeçalho padrão
    de código Perl; ADR-020 define o padrão Domain + Repository (validação de negócio
    com estado, complementar à Policy da ADR-011); ADR-021 define `Stega::Config`,
    módulo único de leitura de variáveis de ambiente (usado tanto pela app via
@@ -427,6 +427,23 @@ Follow this sequence when resuming work on this project:
    `Stega::Job::CheckSlaBreaches` for ligado ao mesmo `script/report_scheduler`
    (ainda pendente, só falta uma entrada na lista de agendamento — ver
    `TODO.txt` da Stega).
+   **Em 2026-07-30, `check_sla_breaches` foi implementado** (agendamento via
+   `script/report_scheduler`, mesma ADR-025) e, junto com ele, a pergunta 1 da
+   ADR-024 (múltiplos workers concorrentes competindo pelo mesmo consumidor
+   PgQue) foi respondida pela nova **ADR-026** (`Aceita`): existe uma API
+   cooperativa no PgQue (`subscribe_subconsumer`/`receive_coop`, marcada
+   "Experimental in PgQue 0.2" pelo próprio autor) que divide trabalho de
+   verdade entre réplicas — usada no novo `Stega::Worker::SlaBreachWorker`
+   (`script/sla_breach_worker`), que escala horizontalmente
+   (`docker compose up --scale sla-breach-worker=N`), diferente do
+   `NotificationWorker`/`pgque_ticker`/`report_scheduler` (sempre 1 réplica).
+   Desenho pedido pelo usuário e importante de preservar em trabalho futuro
+   similar: `Stega::Job::CheckSlaBreaches` **não muda** — continua só
+   publicando `ticket_id` + o contexto mínimo do disparo (evento "fino"); é o
+   `SlaBreachWorker` que resolve **quem** recebe (responsável do ticket +
+   todos os admins, ver `BUSINESS.md`) **na hora da entrega**, lendo o estado
+   atual do banco — nunca o Job decidindo destinatário no momento da
+   varredura. As perguntas 2, 4 e 5 da ADR-024 continuam abertas.
 3. Check `docs/references/` to understand what sources are in play (38 fontes).
 4. Ask the user what they want to work on before creating files.
 5. If the user provides new reference URLs, create reference files first,
@@ -512,6 +529,7 @@ Todas as questões de fundação estão respondidas. As decisões estão registr
 | Acesso a dados documentais | PostgreSQL JSONB via Mojo::Pg | ADR-017 |
 | Aplicação de demonstração | Stega (hibex-solutions/crystallized-perl-stega) | ADR-018 |
 | Agendamento de jobs periódicos internos | Script dedicado (`script/report_scheduler`), enfileira via Minion, mesmo padrão do `script/pgque_ticker` | ADR-025 |
+| Distribuição de trabalho entre consumidores PgQue | API cooperativa experimental (`subscribe_subconsumer`/`receive_coop`) — múltiplas réplicas de verdade, ex. `script/sla_breach_worker` | ADR-026 |
 | Referências externas | 38 fontes em `docs/references/` | — |
 
 **Próximos passos**: escrever os guias de usuário em `docs/guides/`, usando a Stega
