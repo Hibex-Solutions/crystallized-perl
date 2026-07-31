@@ -188,7 +188,11 @@ eval {
     $db->insert('events', {
         ticket_id => $ticket_id,
         type      => 'ticket.created',
-        payload   => { author_id => $author_id },  # Mojo::Pg serializa hashref para JSONB
+        # { json => ... } é o marcador que o Mojo::Pg serializa (via to_json)
+        # para JSONB — um hashref "cru" no bind NÃO é serializado, e
+        # encode_json manual corrompe texto acentuado (dupla codificação);
+        # ver a seção Mojo::JSON em /stack/mojolicious
+        payload   => { json => { author_id => $author_id } },
     });
 
     $tx->commit;
@@ -292,6 +296,6 @@ Use `query_p` quando um único worker precisar iniciar múltiplas queries em par
 | `->hash` em zero resultados | Retorna `undef` — não é um erro | Cheque `unless $row` antes de usar |
 | `->hashes` vs `->hashes->to_array` | `->hashes` retorna um objeto Mojo::Collection | Use `->to_array` para obter arrayref serializável em JSON |
 | Interpolação SQL | `"SELECT * FROM tickets WHERE id = $id"` — injeção SQL | Sempre use placeholders `?` ou `$1` |
-| JSONB como string | Passar string `'{"key":"val"}'` funciona, mas passar hashref é mais seguro | `{ key => 'val' }` — Mojo::Pg serializa automaticamente para JSONB |
+| JSONB no bind | Um hashref "cru" **não** é serializado — só o marcador `{ json => ... }` é; e `encode_json` manual no bind gera dupla codificação (corrompe acentuação) | Gravar com `{ json => $ref }`; ler com `->expand` (ou `from_json` para JSON em `text`/`->>`) — ver a [seção Mojo::JSON](/stack/mojolicious#mojojson--to_jsonfrom_json-vs-encode_jsondecode_json) |
 | `begin` sem `commit` | Transação fica aberta até o `$tx` sair de escopo (rollback automático) | Sempre `eval { ... $tx->commit }` com tratamento de erro |
 | Helper `pg` fora do controller | `$self->pg` só funciona em contexto Mojolicious | Passe a instância `$pg` explicitamente para serviços e scripts |

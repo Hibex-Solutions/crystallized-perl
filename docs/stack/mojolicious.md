@@ -267,11 +267,72 @@ my $user = $self->current_user;
 
 ---
 
+## Mojo::JSON — `to_json`/`from_json` vs. `encode_json`/`decode_json`
+
+O [`Mojo::JSON`](https://mojolicious.org/) (parte do Mojolicious — ver a
+[referência oficial](/references/mojolicious)) exporta dois pares de funções que
+fazem "a mesma coisa" com uma diferença crucial: **de que lado da fronteira de
+codificação a string JSON está**.
+
+| | A string JSON é **bytes** (UTF-8) | A string JSON é **caracteres** |
+|---|---|---|
+| Serializar estrutura Perl → JSON | `encode_json($ref)` | `to_json($ref)` |
+| Desserializar JSON → estrutura Perl | `decode_json($str)` | `from_json($str)` |
+
+O modelo mental que resolve todos os casos: **dentro do processo Perl, texto é
+uma sequência de caracteres; bytes só existem nas bordas** (socket, arquivo,
+pipe). Cada borda codifica/decodifica exatamente uma vez — e cada borda já tem
+um dono:
+
+- **HTTP**: o próprio Mojolicious. `$c->req->json` decodifica o corpo da
+  requisição; `$c->render(json => ...)` codifica a resposta. Nesses fluxos não
+  se chama nada do `Mojo::JSON` diretamente.
+- **PostgreSQL**: o `DBD::Pg` (`pg_enable_utf8`). Valores lidos do banco chegam
+  como **caracteres**; valores passados como bind são codificados na saída.
+  Logo, todo JSON que **vem do banco ou vai para ele** está do lado dos
+  caracteres — território de `from_json`/`to_json`, nunca de
+  `decode_json`/`encode_json`. O [Mojo::Pg](/stack/mojo-pg) já embute o par
+  certo: `->expand` decodifica colunas `json`/`jsonb` com `from_json`, e o
+  marcador de bind `{ json => $ref }` serializa com `to_json`.
+- **STDOUT/STDERR com camada `:encoding(UTF-8)`** (`use open ':std', ...`,
+  padrão dos processos da Stega): a camada é a borda — imprima caracteres.
+
+Errar o lado produz duas famílias de sintomas, e só texto **acentuado** as
+revela (ASCII puro passa ileso — por isso o erro parece intermitente):
+
+- `decode_json` sobre caracteres já decodificados: morre com
+  `Input is not UTF-8 encoded` (fallback puro-Perl do Mojo::JSON),
+  `malformed UTF-8 character` ou `Wide character in subroutine entry` (quando o
+  `Cpanel::JSON::XS` está instalado) — três mensagens, uma única causa.
+- `encode_json` entregue a uma borda que codifica de novo (camada `:encoding`,
+  bind do DBD::Pg): **dupla codificação** — `"canção"` vira `"canÃ§Ã£o"`.
+
+Guia rápido para o dia a dia:
+
+| Situação | Use |
+|----------|-----|
+| Corpo de requisição/resposta HTTP em Controller | `$c->req->json` / `$c->render(json => ...)` — o framework cuida da borda |
+| Corpo HTTP **bruto** (`$c->req->body`, ex.: conferir HMAC de webhook antes de interpretar) | `decode_json` (o corpo bruto é bytes) |
+| Coluna `json`/`jsonb` lida via Mojo::Pg | `->expand` no resultado |
+| Texto JSON vindo do banco por outro caminho (`->>` , payload `text` do [PgQue](/stack/pgque)) | `from_json` |
+| Gravar estrutura Perl em coluna `jsonb` | marcador `{ json => $ref }` no bind do Mojo::Pg — nunca `encode_json` manual |
+| Registrar uma estrutura no log (STDOUT/STDERR com `:encoding(UTF-8)`) | `to_json` |
+| Ler/escrever **arquivo** JSON aberto sem camada de encoding | `decode_json`/`encode_json` |
+
+Não é distinção teórica: a Stega conviveu semanas com um "bug de UTF-8"
+intermitente registrado como corrupção de leitura do banco, cuja causa raiz era
+`decode_json` aplicado a payloads que o DBD::Pg já tinha decodificado —
+diagnóstico completo na nota "Correção (2026-07-31)" do
+[estudo anexo à ADR-022](../adrs/references/ADR-022-estudo-filas-postgresql.md).
+
+---
+
 ## Armadilhas comuns
 
 | Armadilha | Descrição | Como evitar |
 |-----------|-----------|-------------|
 | Bloquear o event loop | Chamadas síncronas bloqueantes (sleep, IO síncrono) pausam todos os workers | Use `Mojo::UserAgent` não-bloqueante ou Minion para tarefas longas |
+| `decode_json`/`encode_json` em dado que não é bytes | Sobre valores vindos do banco ou destinados a saídas com `:encoding`, falha em texto acentuado ou gera mojibake | Ver a seção Mojo::JSON acima — `from_json`/`to_json` dentro do processo; `decode_json`/`encode_json` só nas bordas de bytes |
 | Esquecer `return` em `under` | Um `under` que não retorna valor falso/undef permite requisições não autenticadas | Sempre `return undef` ou `return 0` para rejeitar |
 | Templates sem escape | `<%= $input %>` escapa HTML; `<%== $input %>` não — risco de XSS | Use `<%= %>` por padrão; `<%== %>` apenas para HTML interno confiável |
 | `carton exec` omitido | O `daemon` inicia com o Perl do sistema, sem os módulos do Carton | Sempre `carton exec perl script/stega ...` |

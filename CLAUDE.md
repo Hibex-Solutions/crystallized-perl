@@ -444,6 +444,22 @@ Follow this sequence when resuming work on this project:
    todos os admins, ver `BUSINESS.md`) **na hora da entrega**, lendo o estado
    atual do banco — nunca o Job decidindo destinatário no momento da
    varredura. As perguntas 2, 4 e 5 da ADR-024 continuam abertas.
+   **Em 2026-07-31, o "bug pré-existente de UTF-8" foi diagnosticado e
+   corrigido na Stega.** O registro antigo (TODO.txt da Stega, seção de
+   achados do estudo da ADR-022) supunha corrupção na *leitura* do Postgres —
+   a investigação provou que a leitura sempre foi correta (o `unpack('H*') →
+   e1` do roteiro antigo é o codepoint U+00E1 de uma string corretamente
+   decodificada, não um byte cru); a causa real era **dupla decodificação nos
+   consumidores**: `decode_json` (espera bytes) sobre payloads que o DBD::Pg
+   já devolve como caracteres. Corrigido com `from_json` nos consumidores
+   (`NotificationWorker`, `SlaBreachWorker`, `CheckSlaBreaches`, drenos de
+   teste) e `to_json` no `Delivery::Log`; acentuação reintroduzida nos seeds
+   e testes que a evitavam como paliativo; falha reproduzida e correção
+   validada em Windows nativo e no container `test`. Regra consolidada
+   (vale para guias futuros): com `Mojo::Pg`, JSON entra com `{ json => ... }`
+   e sai com `->expand`/`from_json`; `encode_json`/`decode_json` só em bordas
+   que transportam bytes de verdade (corpo HTTP, arquivos). Detalhes na nota
+   "Correção (2026-07-31)" do estudo anexo à ADR-022.
 3. Check `docs/references/` to understand what sources are in play (38 fontes).
 4. Ask the user what they want to work on before creating files.
 5. If the user provides new reference URLs, create reference files first,

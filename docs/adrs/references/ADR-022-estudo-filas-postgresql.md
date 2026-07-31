@@ -806,6 +806,32 @@ Ao escrever e validar esses testes, dois achados colaterais:
    investigação e correção à parte, qualquer que seja o mecanismo de fila
    escolhido.
 
+   **Correção (2026-07-31)** — a investigação concluiu que o diagnóstico
+   acima estava **equivocado em um ponto central**: a leitura do Postgres
+   nunca esteve corrompida. O "byte solto" observado (`unpack('H*') → e1`
+   para "á") é exatamente o que uma string **corretamente decodificada**
+   mostra — `unpack` opera sobre os codepoints lógicos, e `e1` é o codepoint
+   de U+00E1, não um byte Latin-1 cru; o valor esperado registrado (`c3a1`)
+   corresponderia à forma *codificada*, que seria justamente o erro. A causa
+   raiz real era **dupla decodificação nos consumidores**: `decode_json` do
+   `Mojo::JSON` (que espera **bytes** UTF-8) aplicado ao payload que o
+   `DBD::Pg` (`pg_enable_utf8`) já devolve decodificado como caracteres —
+   qualquer texto acentuado então falhava com `Input is not UTF-8 encoded`
+   (fallback puro-Perl do `Mojo::JSON`, caso da imagem `perl:5.42-slim`),
+   `malformed UTF-8 character` ou `Wide character` (com `Cpanel::JSON::XS`
+   instalado, caso do Windows nativo — a mensagem varia, a causa é uma só).
+   Corrigido na Stega trocando `decode_json` por `from_json` (que opera
+   sobre caracteres) em `NotificationWorker`, `SlaBreachWorker`,
+   `CheckSlaBreaches` (antes `JSON::PP::decode_json` sobre `->>`) e nos
+   drenos de teste; `Delivery::Log` passou de `encode_json` para `to_json`
+   (STDERR dos workers já tem camada `:encoding(UTF-8)`). Regra geral
+   consolidada: com `Mojo::Pg`, JSON entra com `{ json => ... }` e sai com
+   `->expand`/`from_json` — `encode_json`/`decode_json` só nas bordas que
+   realmente transportam bytes (corpo HTTP, arquivos). Falha reproduzida e
+   correção validada em Windows nativo e no container `test`
+   (`perl:5.42-slim`), com a acentuação reintroduzida nos seeds e testes que
+   a tinham removido como paliativo.
+
 **O que isso muda, precisamente, para quem for implementar a migração**: os
 testes de `_dispatch` (parte 1 da suíte) continuam **exatamente iguais**, sem
 nenhuma mudança — são lógica pura, sem I/O, e não dependem do mecanismo de

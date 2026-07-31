@@ -206,7 +206,7 @@ use open ':std', ':encoding(UTF-8)';
 $| = 1;
 
 use Mojo::Pg;
-use Mojo::JSON qw(decode_json);
+use Mojo::JSON qw(from_json);
 use Stega::Config;
 
 sub run {
@@ -232,7 +232,10 @@ sub run {
         }
 
         for my $msg (@$messages) {
-            eval { _dispatch($msg->{type}, decode_json($msg->{payload})) };
+            # from_json, nunca decode_json: o DBD::Pg já decodificou o payload
+            # para caracteres — decode_json (que espera bytes) morre em texto
+            # acentuado. Ver a seção Mojo::JSON em /stack/mojolicious.
+            eval { _dispatch($msg->{type}, from_json($msg->{payload})) };
             if ($@) {
                 warn "[NotificationWorker] Erro ao processar evento: $@\n";
                 # nack() exige um pgque.message completo (10 campos), mas só

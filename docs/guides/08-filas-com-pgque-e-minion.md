@@ -153,7 +153,9 @@ sub run {
 `Stega.pm::_setup_database`, ADR-023) — nunca `$app->pg` (que é `db-app`). O
 `{json => $payload}` do `Mojo::Pg` serializa o payload para `jsonb` sem
 `encode_json` manual, evitando a classe de bug de codificação já coberta na
-ADR-017.
+ADR-017. No consumo vale o simétrico: o payload volta do banco já decodificado
+para caracteres, então `from_json`, nunca `decode_json` (ver o Passo 6 e a
+[seção Mojo::JSON da página do Mojolicious](/stack/mojolicious#mojojson--to_jsonfrom_json-vs-encode_jsondecode_json)).
 
 Note que não há `require` condicional nem `eval` em volta da publicação, ao
 contrário do padrão antigo com `Net::AMQP::RabbitMQ`: `pgque.send()` é uma
@@ -263,7 +265,7 @@ use open ':std', ':encoding(UTF-8)';
 $| = 1;
 
 use Mojo::Pg;
-use Mojo::JSON qw(decode_json);
+use Mojo::JSON qw(from_json);
 use Stega::Config;
 
 sub run {
@@ -289,7 +291,11 @@ sub run {
         }
 
         for my $msg (@$messages) {
-            eval { _dispatch($msg->{type}, decode_json($msg->{payload})) };
+            # from_json, nunca decode_json: o DBD::Pg já decodificou o payload
+            # para caracteres — decode_json (que espera bytes) morre em
+            # qualquer texto acentuado. Ver a seção Mojo::JSON em
+            # /stack/mojolicious.
+            eval { _dispatch($msg->{type}, from_json($msg->{payload})) };
             if ($@) {
                 warn "[NotificationWorker] Erro ao processar evento: $@\n";
                 # pgque.nack() exige um pgque.message completo (10 campos),
